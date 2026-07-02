@@ -1,0 +1,758 @@
+/* Kanban board — dark-first, tokens from main.css */
+
+.kanban-root {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* ---------------------------------------------------------------- header */
+
+.kanban-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kanban-header-spacer {
+  flex: 1;
+}
+
+.kanban-filter {
+  width: 200px;
+}
+
+.kanban-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kanban-newtask {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.project-select {
+  background: var(--bg-raised);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: 200px;
+}
+
+.project-add-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-add-path {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------- controls */
+
+.text-input {
+  background: var(--bg-raised);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.text-input:focus {
+  border-color: var(--accent);
+}
+
+.btn {
+  background: var(--bg-overlay);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: var(--border);
+}
+
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+}
+
+.btn-icon {
+  padding: 3px 8px;
+  line-height: 1;
+}
+
+/* --------------------------------------------------------------- columns */
+
+.kanban-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  align-items: stretch;
+}
+
+.kanban-column {
+  flex: 0 0 272px;
+  width: 272px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.kanban-column-over {
+  border-color: var(--accent);
+}
+
+.kanban-column-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+.kanban-column-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.kanban-column-count {
+  font-size: 11px;
+  color: var(--fg-muted);
+  background: var(--bg-overlay);
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 16px;
+}
+
+.kanban-column-body {
+  flex: 1;
+  min-height: 60px;
+  overflow-y: auto;
+  padding: 4px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kanban-column-empty {
+  color: var(--fg-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 14px 0;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+/* ----------------------------------------------------------------- cards */
+
+.task-card {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  cursor: pointer;
+  touch-action: none; /* dnd-kit pointer sensor */
+}
+
+.task-card:hover {
+  border-color: var(--accent);
+}
+
+.task-card-dragging {
+  opacity: 0.35;
+}
+
+.task-card-overlay {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  cursor: grabbing;
+}
+
+.task-card-title {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.task-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  max-width: 100%;
+}
+
+.chip-branch {
+  font-family: var(--font-mono);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.chip-jira {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.diff-add {
+  color: var(--success);
+}
+
+.diff-del {
+  color: var(--danger);
+}
+
+.chip-diff .diff-add {
+  margin-right: 4px;
+}
+
+/* run status pill + dots */
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+@keyframes kanban-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.dot-running {
+  background: var(--accent);
+  animation: kanban-pulse 1.2s ease-in-out infinite;
+}
+
+.dot-queued {
+  background: var(--warning);
+}
+
+.dot-completed {
+  background: var(--success);
+}
+
+.dot-failed {
+  background: var(--danger);
+}
+
+.dot-cancelled {
+  background: var(--fg-muted);
+}
+
+.run-running {
+  color: var(--accent);
+}
+
+.run-queued {
+  color: var(--warning);
+}
+
+.run-completed {
+  color: var(--success);
+}
+
+.run-failed {
+  color: var(--danger);
+}
+
+.run-cancelled {
+  color: var(--fg-muted);
+}
+
+/* ------------------------------------------------------------ empty state */
+
+.kanban-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--fg-muted);
+}
+
+.kanban-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.kanban-empty-hint {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+/* ------------------------------------------------------------ task panel */
+
+.task-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 92%;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border);
+  box-shadow: -14px 0 36px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+}
+
+.task-panel-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-title-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 4px 6px;
+  outline: none;
+}
+
+.panel-title-input:hover,
+.panel-title-input:focus {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.task-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  user-select: text;
+}
+
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.panel-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.panel-desc,
+.panel-followup {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 12.5px;
+  font-family: var(--font-ui);
+  line-height: 1.45;
+  min-height: 84px;
+  resize: vertical;
+  outline: none;
+}
+
+.panel-desc:focus,
+.panel-followup:focus {
+  border-color: var(--accent);
+}
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.panel-note {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+/* run history rows */
+
+.run-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.run-row:hover {
+  border-color: var(--accent);
+}
+
+.run-row-active {
+  border-color: var(--accent);
+  background: var(--bg-overlay);
+}
+
+.run-row-agent {
+  font-family: var(--font-mono);
+  color: var(--fg);
+  flex: none;
+}
+
+.run-row-status {
+  flex: none;
+}
+
+.run-row-time,
+.run-row-duration {
+  color: var(--fg-muted);
+  flex: none;
+  font-size: 11px;
+}
+
+.run-row-summary {
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* tabs */
+
+.panel-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.tab-active {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+
+/* run log */
+
+.run-log {
+  max-height: 340px;
+  min-height: 120px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  user-select: text;
+}
+
+.log-prose {
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.log-tool {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-tool-result {
+  padding-left: 14px;
+}
+
+.log-system {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-result {
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--bg-overlay);
+}
+
+.log-result-ok {
+  border-left-color: var(--success);
+}
+
+.log-result-err {
+  border-left-color: var(--danger);
+}
+
+.log-result-head {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.log-result-ok .log-result-head {
+  color: var(--success);
+}
+
+.log-result-err .log-result-head {
+  color: var(--danger);
+}
+
+.log-result-summary {
+  font-size: 12px;
+  margin-top: 3px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.log-result-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+
+/* diff view */
+
+.diff-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  user-select: text;
+}
+
+.diff-file {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.diff-file-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-overlay);
+  border: none;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.diff-file-caret {
+  color: var(--fg-muted);
+  flex: none;
+}
+
+.diff-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-file-stat {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+.diff-patch {
+  margin: 0;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-x: auto;
+  user-select: text;
+}
+
+.diff-line {
+  padding: 0 9px;
+  white-space: pre;
+}
+
+.diff-line-add {
+  color: var(--success);
+  background: rgba(123, 216, 143, 0.08);
+}
+
+.diff-line-del {
+  color: var(--danger);
+  background: rgba(242, 100, 95, 0.08);
+}
+
+.diff-line-hunk {
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+.diff-line-meta {
+  color: var(--fg-muted);
+  opacity: 0.75;
+}
+
+/* ---------------------------------------------------------------- toasts */
+
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+}
+
+.toast {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 9px 13px;
+  font-size: 12.5px;
+  color: var(--fg);
+  max-width: 380px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.toast-error {
+  border-left-color: var(--danger);
+}
+
+.toast-info {
+  border-left-color: var(--success);
+}
