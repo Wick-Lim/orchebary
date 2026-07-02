@@ -50,10 +50,11 @@ export function PaneLayout(): React.JSX.Element {
   if (!tab) {
     return (
       <div className="pane-empty">
-        <p>No open terminals</p>
-        <button type="button" onClick={() => void useLayoutStore.getState().newTab()}>
-          New Tab <kbd>⌘T</kbd>
-        </button>
+        <p className="pane-empty-title">No active session</p>
+        <p>Drag a card into In Progress to start an agent</p>
+        <p className="pane-empty-hint">
+          <kbd>⌘T</kbd> opens a scratch terminal
+        </p>
       </div>
     )
   }
