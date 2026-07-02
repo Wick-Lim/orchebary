@@ -1,35 +1,44 @@
-import Versions from './components/Versions'
-import electronLogo from './assets/electron.svg'
+import { useEffect, useState } from 'react'
+import type { TerminalSessionInfo } from '../../shared/domain'
+import { terminalRegistry } from './terminal/TerminalRegistry'
+import { TerminalView } from './terminal/TerminalView'
 
-function App(): React.JSX.Element {
-  const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
+// Module-level so double-mounted effects (HMR, StrictMode) can never spawn
+// two shells racing each other.
+let bootPromise: Promise<TerminalSessionInfo> | null = null
 
-  return (
-    <>
-      <img alt="logo" className="logo" src={electronLogo} />
-      <div className="creator">Powered by electron-vite</div>
-      <div className="text">
-        Build an Electron app with <span className="react">React</span>
-        &nbsp;and <span className="ts">TypeScript</span>
-      </div>
-      <p className="tip">
-        Please try pressing <code>F12</code> to open the devTool
-      </p>
-      <div className="actions">
-        <div className="action">
-          <a href="https://electron-vite.org/" target="_blank" rel="noreferrer">
-            Documentation
-          </a>
-        </div>
-        <div className="action">
-          <a target="_blank" rel="noreferrer" onClick={ipcHandle}>
-            Send IPC
-          </a>
-        </div>
-      </div>
-      <Versions></Versions>
-    </>
-  )
+function bootFirstShell(): Promise<TerminalSessionInfo> {
+  bootPromise ??= (async () => {
+    // Rebind to a live session after a renderer reload; otherwise spawn one.
+    const existing = await window.orchebary.terminal.list()
+    return (
+      existing.find((s) => s.kind === 'shell') ??
+      (await window.orchebary.terminal.create({ cols: 80, rows: 24 }))
+    )
+  })()
+  return bootPromise
 }
 
-export default App
+export default function App(): React.JSX.Element {
+  const [sessionId, setSessionId] = useState<string | null>(null)
+
+  useEffect(() => {
+    terminalRegistry.bindIpc()
+    let cancelled = false
+    void bootFirstShell().then((shell) => {
+      if (cancelled) return
+      terminalRegistry.ensure(shell)
+      setSessionId(shell.sessionId)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return (
+    <div className="app-shell">
+      <div className="titlebar-drag" />
+      <div className="workspace">{sessionId && <TerminalView sessionId={sessionId} />}</div>
+    </div>
+  )
+}
