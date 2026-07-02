@@ -524,6 +524,18 @@
   min-width: 0;
 }
 
+.run-row-jump {
+  margin-left: auto;
+  flex: none;
+  color: var(--fg-muted);
+  padding: 0 3px;
+  border-radius: 4px;
+}
+
+.run-row-jump:hover {
+  color: var(--accent);
+}
+
 /* tabs */
 
 .panel-tabs {
