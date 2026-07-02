@@ -88,7 +88,12 @@ const api = {
   git: {
     diff: (runId: string) => invoke('git:diff', { runId }),
     diffStat: (runId: string) => invoke('git:diffStat', { runId }),
-    merge: (runId: string) => invoke('git:merge', { runId })
+    merge: (runId: string) => invoke('git:merge', { runId }),
+    logGraph: (projectId: string) => invoke('git:logGraph', { projectId }),
+    branches: (projectId: string) => invoke('git:branches', { projectId }),
+    branchAction: (projectId: string, branch: string, action: 'merge' | 'rebase' | 'delete') =>
+      invoke('git:branchAction', { projectId, branch, action }),
+    show: (projectId: string, ref: string) => invoke('git:show', { projectId, ref })
   },
 
   worktree: {
@@ -117,6 +122,12 @@ const api = {
 
   dialog: {
     pickDirectory: () => invoke('dialog:pickDirectory', undefined)
+  },
+
+  ui: {
+    contextMenu: (
+      items: Array<{ id?: string; label?: string; type?: 'separator'; enabled?: boolean }>
+    ) => invoke('ui:contextMenu', { items })
   },
 
   onAppEvent: (cb: (p: MainEvents['app:event']) => void) => subscribe('app:event', cb)

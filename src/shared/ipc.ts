@@ -71,6 +71,18 @@ export interface Invokables {
     req: { runId: string }
     res: { ok: true } | { ok: false; conflict: boolean; detail: string }
   }
+  /** Commit graph (`git log --graph --all`) of a project's repo. */
+  'git:logGraph': { req: { projectId: string }; res: { text: string } }
+  'git:branches': {
+    req: { projectId: string }
+    res: Array<{ name: string; head: string; current: boolean; subject: string }>
+  }
+  'git:branchAction': {
+    req: { projectId: string; branch: string; action: 'merge' | 'rebase' | 'delete' }
+    res: { ok: boolean; detail?: string }
+  }
+  /** Commit details (`git show --stat`) for a ref. */
+  'git:show': { req: { projectId: string; ref: string }; res: { text: string } }
 
   'worktree:openInTerminal': { req: { runId: string; cols: number; rows: number }; res: TerminalSessionInfo }
   'worktree:remove': { req: { runId: string; deleteBranch: boolean }; res: void }
@@ -90,6 +102,14 @@ export interface Invokables {
   'settings:set': { req: { key: string; value: unknown }; res: void }
 
   'dialog:pickDirectory': { req: void; res: { path: string } | null }
+
+  /** Native right-click menu; resolves with the clicked item id (or null). */
+  'ui:contextMenu': {
+    req: {
+      items: Array<{ id?: string; label?: string; type?: 'separator'; enabled?: boolean }>
+    }
+    res: { id: string | null }
+  }
 }
 
 /** Fire-and-forget renderer -> main messages (hot path, no promise overhead). */

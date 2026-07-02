@@ -116,6 +116,7 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
       // it is gone (e.g. after an app restart).
       const list = await window.orchebary.terminal.list()
       const live =
+        list.find((x) => x.projectId === task.projectId) ??
         list.find((x) => x.kind === 'agent' && x.taskId === task.id) ??
         list.find((x) => x.taskId === task.id)
       if (live) {

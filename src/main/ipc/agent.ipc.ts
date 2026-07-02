@@ -140,11 +140,25 @@ export function registerAgentIpc(): void {
       rows: z.number().int().min(1).max(1000)
     }),
     async ({ runId, cols, rows }) => {
-      const { run, task } = requireContext(runId)
-      // 1:1 — a task owns one terminal; reuse the live one when it exists.
-      const live = sessionManager.list().find((s) => s.taskId === run.taskId)
+      const { run, task, project } = requireContext(runId)
+      const isWorkbench = path.basename(run.worktreePath) === 'workbench'
+      const live = isWorkbench
+        ? sessionManager.list().find((s) => s.projectId === project.id)
+        : sessionManager.list().find((s) => s.taskId === run.taskId && !s.projectId)
       if (live) return live
       if (!existsSync(run.worktreePath)) throw new Error('worktree no longer exists')
+      if (isWorkbench) {
+        const sessionId = await orchestrator.ensureProjectTerminal(
+          project,
+          task,
+          runId,
+          run.worktreePath
+        )
+        const info = sessionManager.get(sessionId)?.info
+        if (!info) throw new Error('failed to open the project terminal')
+        return info
+      }
+      // Legacy per-task worktree: plain task-tagged shell for review work.
       return sessionManager.createAgentTerminal({
         cwd: run.worktreePath,
         cols,
@@ -166,6 +180,74 @@ export function registerAgentIpc(): void {
         .find((r) => r.status === 'queued' || r.status === 'running')
       if (active) throw new Error('task has an active run; cancel it before removing the worktree')
       await worktrees.remove(project, run, { force: true, deleteBranch })
+    }
+  )
+
+  handle('git:logGraph', z.object({ projectId: z.string() }), async ({ projectId }) => {
+    const project = projects.get(projectId)
+    if (!project) throw new Error(`project ${projectId} not found`)
+    try {
+      return { text: await git.logGraph(project.repoPath) }
+    } catch {
+      return { text: '' }
+    }
+  })
+
+  handle('git:branches', z.object({ projectId: z.string() }), async ({ projectId }) => {
+    const project = projects.get(projectId)
+    if (!project) throw new Error(`project ${projectId} not found`)
+    try {
+      return await git.listBranches(project.repoPath)
+    } catch {
+      return []
+    }
+  })
+
+  handle(
+    'git:branchAction',
+    z.object({
+      projectId: z.string(),
+      branch: z.string().min(1),
+      action: z.enum(['merge', 'rebase', 'delete'])
+    }),
+    async ({ projectId, branch, action }) => {
+      const project = projects.get(projectId)
+      if (!project) throw new Error(`project ${projectId} not found`)
+      if (branch === project.baseBranch) {
+        return { ok: false, detail: `refusing to ${action} the base branch` }
+      }
+      if (action === 'merge') {
+        const res = await git.mergeSquash(
+          project.repoPath,
+          project.baseBranch,
+          branch,
+          `merge ${branch}`
+        )
+        return res.ok ? { ok: true } : { ok: false, detail: res.detail }
+      }
+      if (action === 'rebase') {
+        return git.rebase(project.repoPath, project.baseBranch, branch)
+      }
+      const current = await git.currentBranch(project.repoPath)
+      if (current === branch) {
+        return { ok: false, detail: 'branch is checked out in the primary repo' }
+      }
+      try {
+        await git.deleteBranch(project.repoPath, branch, true)
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, detail: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  handle(
+    'git:show',
+    z.object({ projectId: z.string(), ref: z.string().regex(/^[0-9a-f]{6,40}$/i) }),
+    async ({ projectId, ref }) => {
+      const project = projects.get(projectId)
+      if (!project) throw new Error(`project ${projectId} not found`)
+      return { text: await git.show(project.repoPath, ref) }
     }
   )
 

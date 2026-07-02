@@ -22,6 +22,7 @@ interface SpawnAgentOptions {
   env?: Record<string, string>
   runId: string
   taskId: string
+  projectId?: string
   title: string
 }
 
@@ -56,14 +57,14 @@ export class SessionManager {
     return this.spawnShellSession(
       'agent',
       { cwd: opts.cwd, cols: opts.cols, rows: opts.rows, env: opts.env },
-      { runId: opts.runId, taskId: opts.taskId, title: opts.title }
+      { runId: opts.runId, taskId: opts.taskId, projectId: opts.projectId, title: opts.title }
     )
   }
 
   private async spawnShellSession(
     kind: TerminalKind,
     req: CreateTerminalRequest,
-    meta?: { runId?: string; taskId?: string; title?: string }
+    meta?: { runId?: string; taskId?: string; projectId?: string; title?: string }
   ): Promise<TerminalSessionInfo> {
     const sessionId = nanoid()
     const baseEnv = await captureLoginShellEnv()
@@ -95,7 +96,9 @@ export class SessionManager {
         env,
         title: meta?.title ?? path.basename(cwd)
       },
-      meta?.runId || meta?.taskId ? { runId: meta.runId, taskId: meta.taskId } : undefined
+      meta?.runId || meta?.taskId || meta?.projectId
+        ? { runId: meta.runId, taskId: meta.taskId, projectId: meta.projectId }
+        : undefined
     )
   }
 
@@ -111,7 +114,7 @@ export class SessionManager {
       env: Record<string, string>
       title: string
     },
-    extra?: { runId?: string; taskId?: string }
+    extra?: { runId?: string; taskId?: string; projectId?: string }
   ): TerminalSessionInfo {
     const pty = ptySpawn(spawn.file, spawn.args, {
       name: 'xterm-256color',

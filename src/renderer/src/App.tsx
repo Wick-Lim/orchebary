@@ -5,7 +5,7 @@ import { Toasts } from './kanban/Toasts'
 import { installKeybindings } from './layout/KeybindingService'
 import { PaneLayout } from './layout/PaneLayout'
 import { WorkspaceRail } from './layout/WorkspaceRail'
-import { WorktreesPanel } from './worktrees/WorktreesPage'
+import { GitPanel } from './worktrees/GitPanel'
 import { registerBuiltinActions } from './palette/actions'
 import { PaletteHost } from './palette/PaletteHost'
 import { initWorkspace, useLayoutStore } from './state/layoutStore'
@@ -82,7 +82,7 @@ export default function App(): React.JSX.Element {
             </div>
           )}
         </div>
-        <WorktreesPanel />
+        <GitPanel />
       </div>
       <PaletteHost />
       <Toasts />

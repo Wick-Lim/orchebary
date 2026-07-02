@@ -143,6 +143,15 @@ export class RunStore {
       .map(toRun)
   }
 
+  /** Whether a settled conversation already happened in this worktree. */
+  hasSettledRunForWorktree(worktreePath: string): boolean {
+    return !!this.db
+      .prepare<[string], { one: number }>(
+        `SELECT 1 AS one FROM task_runs WHERE worktree_path = ? AND status = 'completed' LIMIT 1`
+      )
+      .get(worktreePath)
+  }
+
   /** Latest run per distinct worktree — the Worktrees view's backbone. */
   listLatestPerWorktree(): TaskRun[] {
     return this.db

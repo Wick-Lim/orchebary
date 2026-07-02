@@ -7,6 +7,7 @@ import { registerMiscIpc } from './ipc/misc.ipc'
 import { handle } from './ipc/router'
 import { registerTasksIpc } from './ipc/tasks.ipc'
 import { registerTerminalIpc } from './ipc/terminal.ipc'
+import { registerUiIpc } from './ipc/ui.ipc'
 import { closeDb, getDb } from './db/database'
 import { sessionManager } from './terminal/SessionManager'
 import { captureLoginShellEnv } from './terminal/shellEnv'
@@ -75,6 +76,7 @@ app.whenReady().then(() => {
   registerMiscIpc()
   registerTasksIpc()
   registerAgentIpc()
+  registerUiIpc()
 
   createWindow()
 

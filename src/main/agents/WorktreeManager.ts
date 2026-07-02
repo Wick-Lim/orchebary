@@ -37,6 +37,28 @@ export class WorktreeManager {
     return `orc/${shortId(taskId)}-${slugify(title)}`
   }
 
+  /**
+   * The project's single workbench: one worktree/branch where the project's
+   * claude session works through queued tasks. Reused across runs.
+   */
+  async ensureWorkbench(
+    project: Project
+  ): Promise<{ worktreePath: string; branch: string; baseRef: string }> {
+    const worktreePath = path.join(this.root, shortId(project.id), 'workbench')
+    const branch = `orc/workbench-${shortId(project.id)}`
+    const baseRef = await this.git.revParse(project.repoPath, project.baseBranch)
+    if (existsSync(worktreePath)) return { worktreePath, branch, baseRef }
+    await mkdir(path.dirname(worktreePath), { recursive: true })
+    if (await this.branchExists(project.repoPath, branch)) {
+      // Directory vanished but the branch survived: re-attach it.
+      await this.git.worktreePrune(project.repoPath)
+      await this.git.worktreeAttach(project.repoPath, worktreePath, branch)
+    } else {
+      await this.git.worktreeAdd(project.repoPath, worktreePath, branch, baseRef)
+    }
+    return { worktreePath, branch, baseRef }
+  }
+
   async create(
     project: Project,
     task: Task

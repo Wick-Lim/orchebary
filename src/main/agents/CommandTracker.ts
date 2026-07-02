@@ -1,76 +1,107 @@
 /**
- * Tracks one armed command inside a task terminal via the shell-integration
+ * Tracks agent commands inside a project terminal via the shell-integration
  * markers our zsh shim emits (OSC 133;A prompt / C executed / D;exit done).
- * The agent command is typed into the shell at the first prompt; when the
- * command finishes the terminal drops back to the prompt and KEEPS RUNNING —
- * only the run record settles.
+ *
+ * Work is serialized safely: an idle shell gets the agent command typed at
+ * its prompt; work arriving while the agent is BOOTING waits (typing into a
+ * startup dialog corrupts it); work arriving while the agent is warmly
+ * running is typed straight into the conversation; whatever is still waiting
+ * when the agent exits starts the next turn (`--continue`, same
+ * conversation). Each finished command settles exactly the tasks that rode
+ * in it.
  */
 
 const OSC_PROMPT = '\x1b]133;A\x07'
 const OSC_EXEC = '\x1b]133;C\x07'
 const OSC_DONE = /\x1b\]133;D(?:;(\d+))?\x07/
 
+/** How long after command start the agent's input is considered ready. */
+const INPUT_READY_MS = 20_000
+
 /** Written around the command so zle treats embedded newlines as literal. */
 function bracketedPaste(cmd: string): string {
   return `\x1b[200~${cmd}\x1b[201~\r`
 }
 
-export interface ArmedCommand {
+export interface SubmittedWork {
   runId: string
-  command: string
+  /** Message text typed into a live claude session. */
+  promptText: string
+  /** Shell command used when the session must be (re)started for this work. */
+  buildCommand: () => string
 }
 
 type State =
   | { phase: 'idle' }
-  | { phase: 'wait-prompt'; armed: ArmedCommand }
-  | { phase: 'wait-exec'; armed: ArmedCommand }
-  | { phase: 'running'; armed: ArmedCommand }
+  | { phase: 'wait-prompt'; command: string; attached: string[] }
+  | { phase: 'wait-exec'; command: string; attached: string[] }
+  | { phase: 'running'; attached: string[]; execAt: number }
 
 export class CommandTracker {
   private state: State = { phase: 'idle' }
   private atPrompt = false
   private tail = ''
   private fallbackTimer: NodeJS.Timeout | null = null
+  /** Work waiting for a safe moment to enter the session. */
+  private pending: SubmittedWork[] = []
 
   constructor(
     private readonly write: (data: string) => void,
-    private readonly onFinished: (runId: string, exitCode: number) => void
+    private readonly onFinished: (runIds: string[], exitCode: number) => void
   ) {}
 
-  /** True while an armed agent command is pending or in the foreground. */
   get busy(): boolean {
     return this.state.phase !== 'idle'
   }
 
-  get activeRunId(): string | undefined {
-    return this.state.phase === 'idle' ? undefined : this.state.armed.runId
+  /** Runs riding in the current foreground command. */
+  get attachedRunIds(): string[] {
+    return this.state.phase === 'idle' ? [] : this.state.attached
   }
 
-  /**
-   * Queue a command to be typed at the next shell prompt (immediately if the
-   * shell is already sitting at one). Throws if a tracked command is active.
-   */
-  arm(cmd: ArmedCommand): void {
-    if (this.busy) throw new Error('the task terminal is busy with another agent command')
-    if (this.atPrompt) {
-      this.send(cmd)
+  submit(work: SubmittedWork): void {
+    if (this.state.phase === 'idle') {
+      this.arm(work)
+    } else if (
+      this.state.phase === 'running' &&
+      Date.now() - this.state.execAt > INPUT_READY_MS
+    ) {
+      // The agent has been up long enough to be past startup dialogs — type
+      // the task into the conversation.
+      this.state.attached.push(work.runId)
+      this.write(bracketedPaste(work.promptText))
     } else {
-      this.state = { phase: 'wait-prompt', armed: cmd }
+      this.pending.push(work)
+    }
+  }
+
+  /** Drop queued work (its card left In Progress before it started). */
+  removePending(runId: string): void {
+    this.pending = this.pending.filter((w) => w.runId !== runId)
+  }
+
+  private arm(work: SubmittedWork): void {
+    const command = work.buildCommand()
+    if (this.atPrompt) {
+      this.send(command, [work.runId])
+    } else {
+      this.state = { phase: 'wait-prompt', command, attached: [work.runId] }
       // Degraded shells (no OSC 133) never report a prompt — type anyway
-      // after a grace period; the run then settles only on terminal exit.
-      // Generous: heavy dotfiles can take >10s to reach the first prompt,
-      // and typing early leaks raw paste markers into the scrollback.
+      // after a generous grace period (heavy dotfiles are slow, and typing
+      // early spills raw paste markers into the scrollback).
       this.fallbackTimer = setTimeout(() => {
-        if (this.state.phase === 'wait-prompt') this.send(this.state.armed)
+        if (this.state.phase === 'wait-prompt') {
+          this.send(this.state.command, this.state.attached)
+        }
       }, 25_000)
       this.fallbackTimer.unref()
     }
   }
 
-  private send(cmd: ArmedCommand): void {
+  private send(command: string, attached: string[]): void {
     this.clearFallback()
-    this.state = { phase: 'wait-exec', armed: cmd }
-    this.write(bracketedPaste(cmd.command))
+    this.state = { phase: 'wait-exec', command, attached }
+    this.write(bracketedPaste(command))
   }
 
   /** Feed raw PTY output (latin1-decoded); marker bytes are pure ASCII. */
@@ -83,7 +114,6 @@ export class CommandTracker {
     while (cursor < data.length) {
       const prompt = data.indexOf(OSC_PROMPT, cursor)
       const exec = data.indexOf(OSC_EXEC, cursor)
-      OSC_DONE.lastIndex = 0
       const doneMatch = OSC_DONE.exec(data.slice(cursor))
       const done = doneMatch ? cursor + doneMatch.index : -1
 
@@ -98,30 +128,40 @@ export class CommandTracker {
 
       if (next.kind === 'prompt') {
         this.atPrompt = true
-        if (this.state.phase === 'wait-prompt') this.send(this.state.armed)
+        if (this.state.phase === 'wait-prompt') {
+          this.send(this.state.command, this.state.attached)
+        } else if (this.state.phase === 'idle') {
+          // Shell is at a prompt again — start queued work.
+          const queued = this.pending.shift()
+          if (queued) this.arm(queued)
+        }
       } else if (next.kind === 'exec') {
         this.atPrompt = false
         if (this.state.phase === 'wait-exec') {
-          this.state = { phase: 'running', armed: this.state.armed }
+          this.state = { phase: 'running', attached: this.state.attached, execAt: Date.now() }
         }
       } else {
         this.atPrompt = false
         if (this.state.phase === 'running') {
-          const { runId } = this.state.armed
+          const { attached } = this.state
           this.state = { phase: 'idle' }
           const code = doneMatch?.[1] !== undefined ? parseInt(doneMatch[1], 10) : 0
-          this.onFinished(runId, Number.isFinite(code) ? code : 0)
+          this.onFinished(attached, Number.isFinite(code) ? code : 0)
+          // The next queued task opens the next turn of the conversation.
+          const queued = this.pending.shift()
+          if (queued) this.arm(queued)
         }
       }
     }
   }
 
-  /** Terminal died: report the active run (if any) and reset. */
-  dispose(): string | undefined {
+  /** Terminal died: everything in flight or waiting is affected. */
+  dispose(): string[] {
     this.clearFallback()
-    const runId = this.activeRunId
+    const affected = [...this.attachedRunIds, ...this.pending.map((w) => w.runId)]
     this.state = { phase: 'idle' }
-    return runId
+    this.pending = []
+    return affected
   }
 
   private clearFallback(): void {

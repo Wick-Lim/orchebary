@@ -741,3 +741,57 @@
   font-size: 10.5px;
   color: var(--fg-muted);
 }
+
+/* Project group in the rail: the header IS the project's terminal */
+.rail-group {
+  margin-bottom: 8px;
+}
+
+.rail-project {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  margin: 0 2px 2px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.rail-project:hover {
+  background: var(--bg-overlay);
+  color: var(--fg);
+}
+
+.rail-project.is-active {
+  background: var(--bg-overlay);
+  color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail-project.no-session {
+  opacity: 0.75;
+}
+
+.rail-project-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-project-count {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+  font-weight: 500;
+}
+
+.rail-issue {
+  margin-left: 12px;
+}

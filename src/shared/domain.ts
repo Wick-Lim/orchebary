@@ -160,6 +160,8 @@ export interface TerminalSessionInfo {
   /** Set for agent-attached sessions. */
   runId?: string
   taskId?: string
+  /** The project this terminal works for (one agent terminal per project). */
+  projectId?: string
 }
 
 export interface CreateTerminalRequest {

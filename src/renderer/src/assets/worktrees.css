@@ -1,6 +1,6 @@
 /* Always-visible right sidebar: worktree management */
 .wt-panel {
-  flex: 0 0 264px;
+  flex: 0 0 300px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -170,4 +170,164 @@
 .wt-action-danger:hover {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+/* Commit graph */
+.git-graph {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.git-line {
+  white-space: pre;
+}
+
+.git-line-art {
+  color: var(--fg-muted);
+}
+
+.git-art {
+  color: var(--fg-muted);
+}
+
+.git-hash {
+  color: var(--accent);
+}
+
+.git-refs {
+  color: var(--warning);
+}
+
+.git-msg {
+  color: var(--fg);
+}
+
+/* Collapsible worktrees section under the graph */
+.wt-section {
+  flex: 0 0 auto;
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 6px;
+}
+
+.wt-section summary {
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  list-style: none;
+}
+
+.wt-section summary::before {
+  content: '▸ ';
+}
+
+.wt-section[open] summary::before {
+  content: '▾ ';
+}
+
+.wt-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Commit hover + details */
+.git-line-commit {
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.git-line-commit:hover {
+  background: var(--bg-overlay);
+}
+
+.git-detail {
+  flex: 0 0 auto;
+  max-height: 34%;
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.git-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.git-detail-body {
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+  user-select: text;
+}
+
+/* Branch list */
+.git-branches {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 6px;
+  max-height: 30%;
+  overflow-y: auto;
+}
+
+.git-branch {
+  padding: 5px 6px;
+  border-radius: 6px;
+}
+
+.git-branch:hover {
+  background: var(--bg-overlay);
+}
+
+.git-branch.is-current .git-branch-name {
+  color: var(--success);
+}
+
+.git-branch-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.git-branch-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.git-branch-actions {
+  display: none;
+  margin-top: 4px;
+}
+
+.git-branch:hover .git-branch-actions {
+  display: flex;
 }

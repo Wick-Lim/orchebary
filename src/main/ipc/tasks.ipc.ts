@@ -126,14 +126,10 @@ export function registerTasksIpc(): void {
     ({ id, status, position, expectedRev }) => {
       const current = tasks.get(id)
       if (!current) return { ok: false as const, reason: 'task not found' }
-      // A live agent owns the inprogress column; the board may not pull the
-      // card out from under it.
-      if (
-        current.status === 'inprogress' &&
-        current.latestRun?.status === 'running' &&
-        status !== 'inprogress'
-      ) {
-        return { ok: false as const, reason: 'Cancel the running agent first' }
+      // Dragging a card out of In Progress just drops it from the project
+      // queue — the project's claude session keeps running.
+      if (current.status === 'inprogress' && status !== 'inprogress') {
+        getOrchestrator()?.detachTask(id)
       }
       const res = tasks.move(id, status, position, expectedRev)
       if (!res.ok) return res

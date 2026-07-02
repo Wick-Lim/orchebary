@@ -69,6 +69,78 @@ export class GitService {
     await this.git(['worktree', 'add', wtPath, '-b', branch, baseRef], repo)
   }
 
+  /** Attach an existing branch to a new worktree directory. */
+  async worktreeAttach(repo: string, wtPath: string, branch: string): Promise<void> {
+    await this.git(['worktree', 'add', wtPath, branch], repo)
+  }
+
+  /** ASCII commit graph across all refs, newest first. */
+  async logGraph(repo: string, limit = 80): Promise<string> {
+    return this.git(
+      ['log', '--graph', '--oneline', '--decorate=short', '--all', `-${limit}`, '--color=never'],
+      repo
+    )
+  }
+
+  async listBranches(
+    repo: string
+  ): Promise<Array<{ name: string; head: string; current: boolean; subject: string }>> {
+    const out = await this.git(
+      ['for-each-ref', 'refs/heads', '--format=%(HEAD)%00%(refname:short)%00%(objectname:short)%00%(subject)'],
+      repo
+    )
+    return out
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [head, name, hash, subject] = line.split('\0')
+        return { name, head: hash, current: head === '*', subject: subject ?? '' }
+      })
+  }
+
+  async checkout(repo: string, ref: string): Promise<void> {
+    await this.git(['checkout', ref], repo)
+  }
+
+  /**
+   * Rebase `branch` onto `base` inside the primary repo, restoring the
+   * previously checked-out branch afterwards. Aborts cleanly on conflict.
+   */
+  async rebase(
+    repo: string,
+    base: string,
+    branch: string
+  ): Promise<{ ok: true } | { ok: false; detail: string }> {
+    if ((await this.statusPorcelain(repo)) !== '') {
+      return { ok: false, detail: 'primary checkout has uncommitted changes' }
+    }
+    const previous = await this.currentBranch(repo)
+    try {
+      await this.git(['rebase', base, branch], repo)
+      if (previous && previous !== branch) await this.checkout(repo, previous)
+      return { ok: true }
+    } catch (err) {
+      try {
+        await this.git(['rebase', '--abort'], repo)
+      } catch {
+        // no rebase in progress
+      }
+      if (previous) {
+        try {
+          await this.checkout(repo, previous)
+        } catch {
+          // best effort
+        }
+      }
+      return { ok: false, detail: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /** Commit details (message + stat) for the panel. */
+  async show(repo: string, ref: string): Promise<string> {
+    return this.git(['show', '--stat', '--format=medium', '--color=never', ref], repo)
+  }
+
   async worktreeRemove(repo: string, wtPath: string, force = false): Promise<void> {
     const args = ['worktree', 'remove']
     if (force) args.push('--force')

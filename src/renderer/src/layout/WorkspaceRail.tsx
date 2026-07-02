@@ -43,10 +43,9 @@ function ScratchRow({
 }
 
 /**
- * Primary navigation of the terminal workspace: the issues being worked on.
- * Each issue owns exactly ONE terminal (a shell in its worktree where the
- * agent runs as a command) — clicking the issue focuses it, recreating the
- * shell if it is gone. Scratch shells sink to the rail bottom.
+ * Primary navigation of the terminal workspace. One agent terminal per
+ * PROJECT: the project header is the terminal, and the issues queued into it
+ * are listed beneath (Jira-style rows). Scratch shells sink to the bottom.
  */
 export function WorkspaceRail(): React.JSX.Element {
   const [items, setItems] = useState<RailTask[]>([])
@@ -87,62 +86,87 @@ export function WorkspaceRail(): React.JSX.Element {
   }, [tabs, activeTabId])
 
   const allSessions = Object.values(sessions)
-  const sessionForTask = (taskId: string): TerminalSessionInfo | undefined =>
-    allSessions.find((s) => s.taskId === taskId && s.kind === 'agent') ??
-    allSessions.find((s) => s.taskId === taskId)
-  const scratchShells = allSessions.filter((s) => s.kind === 'shell' && !s.taskId)
+  const sessionForProject = (projectId: string): TerminalSessionInfo | undefined =>
+    allSessions.find((s) => s.projectId === projectId)
 
-  const openIssueTerminal = (t: RailTask): void => {
-    const session = sessionForTask(t.id)
+  const openProjectTerminal = (projectId: string, fallback?: RailTask): void => {
+    const session = sessionForProject(projectId)
     if (session) {
       useLayoutStore.getState().revealSession(session)
       return
     }
-    // Terminal gone (e.g. after an app restart) — recreate it in the worktree.
-    if (t.latestRun) {
+    const runId = fallback?.latestRun?.id
+    if (runId) {
       void window.orchebary.worktree
-        .openInTerminal(t.latestRun.id, 80, 24)
+        .openInTerminal(runId, 80, 24)
         .then((info) => useLayoutStore.getState().revealSession(info))
         .catch(() => undefined)
     }
   }
 
+  // The rail is the active queue: In Progress issues only.
+  const inProgress = items.filter((t) => t.status === 'inprogress')
+  const groups = new Map<string, { name: string; items: RailTask[] }>()
+  for (const t of inProgress) {
+    const g = groups.get(t.projectId)
+    if (g) g.items.push(t)
+    else groups.set(t.projectId, { name: t.projectName, items: [t] })
+  }
+
+  const scratchShells = allSessions.filter((s) => s.kind === 'shell' && !s.taskId && !s.projectId)
+
   return (
     <div className="task-rail">
       <div className="task-rail-header">
-        Working on <span className="task-rail-count">{items.length}</span>
+        In Progress <span className="task-rail-count">{inProgress.length}</span>
       </div>
-      {items.length === 0 && (
+      {inProgress.length === 0 && (
         <div className="rail-empty">
-          Drag a card into In Progress — the agent&apos;s terminal will appear here.
+          Drag a card into In Progress — the project&apos;s agent terminal appears here.
         </div>
       )}
-      {items.map((t) => {
-        const session = sessionForTask(t.id)
-        const active = session ? activeSessionIds.has(session.sessionId) : false
-        const running = t.latestRun?.status === 'running' || t.latestRun?.status === 'queued'
+      {[...groups.entries()].map(([projectId, group]) => {
+        const session = sessionForProject(projectId)
+        const projectActive = session ? activeSessionIds.has(session.sessionId) : false
+        const anyRunning = group.items.some(
+          (t) => t.latestRun?.status === 'running' || t.latestRun?.status === 'queued'
+        )
         return (
-          <div
-            key={t.id}
-            className={`rail-issue${active ? ' is-active' : ''}${session || t.latestRun ? '' : ' no-session'}`}
-            role="button"
-            tabIndex={0}
-            title={t.title}
-            onClick={() => openIssueTerminal(t)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') openIssueTerminal(t)
-            }}
-          >
-            <div className="rail-issue-title">
-              {running && <span className="task-rail-dot is-running" />}
-              {t.title}
+          <div key={projectId} className="rail-group">
+            <div
+              className={`rail-project${projectActive ? ' is-active' : ''}${session ? '' : ' no-session'}`}
+              role="button"
+              tabIndex={0}
+              title={`${group.name} — project terminal`}
+              onClick={() => openProjectTerminal(projectId, group.items[0])}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') openProjectTerminal(projectId, group.items[0])
+              }}
+            >
+              {anyRunning && <span className="task-rail-dot is-running" />}
+              <span className="rail-project-name">{group.name}</span>
+              <span className="rail-project-count">{group.items.length}</span>
             </div>
-            <div className="rail-issue-sub">
-              <span className={`panel-status-chip status-${t.status}`}>
-                {TASK_STATUS_LABEL[t.status]}
-              </span>
-              <span className="rail-issue-project">{t.projectName}</span>
-            </div>
+            {group.items.map((t) => (
+              <div
+                key={t.id}
+                className={`rail-issue${projectActive ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                title={t.title}
+                onClick={() => openProjectTerminal(projectId, t)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') openProjectTerminal(projectId, t)
+                }}
+              >
+                <div className="rail-issue-title">{t.title}</div>
+                <div className="rail-issue-sub">
+                  <span className={`panel-status-chip status-${t.status}`}>
+                    {TASK_STATUS_LABEL[t.status]}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )
       })}

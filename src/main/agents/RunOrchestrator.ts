@@ -1,5 +1,4 @@
-import { existsSync } from 'node:fs'
-import type { AgentKind, AppEvent, Task, TaskRun, TaskStatus } from '../../shared/domain'
+import type { AgentKind, AppEvent, Project, Task, TaskRun, TaskStatus } from '../../shared/domain'
 import type { ProjectStore } from '../db/ProjectStore'
 import type { RunStore } from '../db/RunStore'
 import type { TaskStore } from '../db/TaskStore'
@@ -23,20 +22,22 @@ export interface OrchestratorDeps {
 const CANCEL_INTERRUPT = '\x03'
 const CANCEL_KILL_GRACE_MS = 6000
 
-function defaultPrompt(task: Task): string {
+function taskPrompt(task: Task): string {
   return `Task: ${task.title}\n\n${task.description}`
 }
 
 /**
- * Plan-first, terminal-persistent run lifecycle. Each task owns ONE terminal:
- * a real login shell in its worktree. The agent command (`claude
- * --permission-mode plan …`) is typed into that shell; OSC 133 markers from
- * the shell integration tell us when the command finishes, which settles the
- * run (auto-commit -> diff -> In Review) while the terminal keeps running for
- * review work and `claude --continue`.
+ * One agent terminal PER PROJECT: a real login shell in the project's
+ * workbench worktree running a single claude session. Dragging cards into
+ * In Progress queues their prompts into that session (typed while claude is
+ * live, or as the command's argument when the shell is idle). When the claude
+ * command exits, every queued task settles together: auto-commit -> diff ->
+ * In Review — and the terminal stays for review work.
  */
 export class RunOrchestrator {
-  /** One tracker per live task terminal, keyed by sessionId. */
+  /** projectId -> live terminal sessionId */
+  private projectSessions = new Map<string, string>()
+  private sessionProjects = new Map<string, string>()
   private trackers = new Map<string, CommandTracker>()
   private cancelling = new Set<string>()
   private killTimers = new Map<string, NodeJS.Timeout>()
@@ -49,12 +50,15 @@ export class RunOrchestrator {
       if (tracker) tracker.push(Buffer.from(frame).toString('latin1'))
     })
     deps.sessions.onExit((sessionId) => {
-      const tracker = this.trackers.get(sessionId)
-      if (!tracker) return
+      const projectId = this.sessionProjects.get(sessionId)
+      const affected = this.trackers.get(sessionId)?.dispose() ?? []
       this.trackers.delete(sessionId)
-      const runId = tracker.dispose()
-      if (runId && !this.stopped) {
-        void this.settleRun(runId, null, 'terminal closed').catch((e) =>
+      this.sessionProjects.delete(sessionId)
+      if (projectId && this.projectSessions.get(projectId) === sessionId) {
+        this.projectSessions.delete(projectId)
+      }
+      if (affected.length > 0 && !this.stopped) {
+        void this.settleRuns(affected, null, 'terminal closed').catch((e) =>
           console.error('[agents] settle after terminal close failed:', e)
         )
       }
@@ -62,145 +66,55 @@ export class RunOrchestrator {
   }
 
   /**
-   * Start (or continue) agent work on a task. Fresh tasks get a new worktree
-   * and the full task prompt; tasks with an existing worktree reopen the
-   * conversation there (`--continue`), so dragging a card back into
-   * In Progress resumes where it left off.
+   * Queue a task into its project's agent session (creating the workbench
+   * worktree and the terminal on first use).
    */
   async start(taskId: string, agentKind?: AgentKind, prompt?: string): Promise<TaskRun> {
     const { tasks, projects, runs, worktrees } = this.deps
     const task = tasks.get(taskId)
     if (!task || task.deletedAt) throw new Error(`task ${taskId} not found`)
-    this.assertNoActiveRun(taskId)
+    const existing = runs
+      .listForTask(taskId)
+      .find((r) => r.status === 'queued' || r.status === 'running')
+    if (existing) return existing
     const project = projects.get(task.projectId)
     if (!project) throw new Error(`project ${task.projectId} not found`)
 
-    const latest = runs.latestForTask(taskId)
-    const reuse = latest && existsSync(latest.worktreePath)
-    const kind = agentKind ?? latest?.agentKind ?? project.settings.defaultAgent
+    const kind = agentKind ?? project.settings.defaultAgent
     const adapter = await this.requireAdapter(kind)
+    const wb = await worktrees.ensureWorkbench(project)
 
-    const wt = reuse
-      ? { worktreePath: latest.worktreePath, branch: latest.branch, baseRef: latest.baseRef }
-      : await worktrees.create(project, task)
-
-    // Reused worktrees reopen the conversation without auto-submitting a
-    // message (no tokens burned until the user types); fresh ones get the
-    // full task prompt.
-    const custom = prompt?.trim() ?? ''
-    const command = reuse
-      ? adapter.buildInteractiveFollowUpCommand({ prompt: custom })
-      : adapter.buildInteractiveCommand({ prompt: custom || defaultPrompt(task) })
-
-    return this.launch(task, {
-      agentKind: kind,
-      prompt: custom || (reuse ? '(continue session)' : defaultPrompt(task)),
-      parentRunId: reuse ? latest.id : undefined,
-      ...wt,
-      command
-    })
-  }
-
-  /** Explicit follow-up message from the board (task keeps its terminal). */
-  async followUp(taskId: string, prompt: string): Promise<TaskRun> {
-    const { tasks, runs } = this.deps
-    const task = tasks.get(taskId)
-    if (!task || task.deletedAt) throw new Error(`task ${taskId} not found`)
-    this.assertNoActiveRun(taskId)
-
-    const latest = runs.latestForTask(taskId)
-    if (!latest) throw new Error('no previous run to follow up on')
-    if (!existsSync(latest.worktreePath)) {
-      throw new Error('worktree no longer exists; drag the card into In Progress to start fresh')
-    }
-    const adapter = await this.requireAdapter(latest.agentKind)
-    if (!adapter.supportsFollowUp) {
-      throw new Error(`${adapter.displayName} does not support follow-ups`)
-    }
-
-    return this.launch(task, {
-      agentKind: latest.agentKind,
-      prompt,
-      parentRunId: latest.id,
-      worktreePath: latest.worktreePath,
-      branch: latest.branch,
-      baseRef: latest.baseRef,
-      command: adapter.buildInteractiveFollowUpCommand({ prompt })
-    })
-  }
-
-  /**
-   * The task's one terminal: reuse the live session bound to the task or
-   * spawn a fresh login shell in the worktree.
-   */
-  async ensureTaskTerminal(
-    task: Pick<Task, 'id' | 'title'>,
-    worktreePath: string,
-    runId?: string
-  ): Promise<{ sessionId: string; created: boolean }> {
-    const live = this.deps.sessions
-      .list()
-      .find((s) => s.taskId === task.id && (s.kind === 'agent' || s.kind === 'shell'))
-    if (live) return { sessionId: live.sessionId, created: false }
-
-    const info = await this.deps.sessions.createAgentTerminal({
-      cwd: worktreePath,
-      cols: 120,
-      rows: 30,
-      runId: runId ?? '',
-      taskId: task.id,
-      title: task.title
-    })
-    return { sessionId: info.sessionId, created: true }
-  }
-
-  private async launch(
-    task: Task,
-    spec: {
-      agentKind: AgentKind
-      prompt: string
-      parentRunId?: string
-      worktreePath: string
-      branch: string
-      baseRef: string
-      command: string
-    }
-  ): Promise<TaskRun> {
-    const { runs } = this.deps
+    const promptText = prompt?.trim() || taskPrompt(task)
     const run = runs.insert({
-      taskId: task.id,
-      agentKind: spec.agentKind,
-      prompt: spec.prompt,
-      parentRunId: spec.parentRunId,
-      worktreePath: spec.worktreePath,
-      branch: spec.branch,
-      baseRef: spec.baseRef
+      taskId,
+      agentKind: kind,
+      prompt: promptText,
+      worktreePath: wb.worktreePath,
+      branch: wb.branch,
+      baseRef: wb.baseRef
     })
-    this.moveTask(task.id, 'inprogress')
+    this.moveTask(taskId, 'inprogress')
 
     try {
-      const { sessionId } = await this.ensureTaskTerminal(task, spec.worktreePath, run.id)
-      let tracker = this.trackers.get(sessionId)
-      if (!tracker) {
-        tracker = new CommandTracker(
-          (data) => this.deps.sessions.write(sessionId, data),
-          (runId, exitCode) => {
-            void this.settleRun(runId, exitCode).catch((e) =>
-              console.error('[agents] settle failed:', e)
-            )
-          }
-        )
-        this.trackers.set(sessionId, tracker)
-      }
-      tracker.arm({ runId: run.id, command: spec.command })
+      const sessionId = await this.ensureProjectTerminal(project, task, run.id, wb.worktreePath)
+      const tracker = this.trackers.get(sessionId)!
+      // Idle shell -> fresh claude turn for this task; agent starting ->
+      // buffered until live; agent live -> typed into the conversation.
+      // (Deliberately no --continue: conversation lookup proved unreliable
+      // inside worktrees; each turn is fresh and self-contained.)
+      tracker.submit({
+        runId: run.id,
+        promptText,
+        buildCommand: () => adapter.buildInteractiveCommand({ prompt: promptText })
+      })
       const pid = this.deps.sessions.get(sessionId)?.info.pid
       runs.markRunning(run.id, pid ?? 0)
     } catch (err) {
       runs.finish(run.id, {
         status: 'failed',
-        summary: `failed to launch the task terminal: ${err instanceof Error ? err.message : err}`
+        summary: `failed to launch the project terminal: ${err instanceof Error ? err.message : err}`
       })
-      this.moveTask(task.id, 'inreview')
+      this.moveTask(taskId, 'inreview')
     }
 
     const current = runs.get(run.id) ?? run
@@ -208,87 +122,165 @@ export class RunOrchestrator {
     return current
   }
 
-  /**
-   * The agent command finished (or its terminal died): commit what changed,
-   * record the outcome, move the card to review. Never 'failed' here — an
-   * interactive session the user drove to completion is not a failure.
-   */
-  private async settleRun(
+  /** Follow-up from the board — same queueing path. */
+  async followUp(taskId: string, prompt: string): Promise<TaskRun> {
+    return this.start(taskId, undefined, prompt)
+  }
+
+  /** The project's one terminal, recreated in the workbench if it is gone. */
+  async ensureProjectTerminal(
+    project: Project,
+    task: Pick<Task, 'id'>,
     runId: string,
+    worktreePath: string
+  ): Promise<string> {
+    const known = this.projectSessions.get(project.id)
+    if (known && this.deps.sessions.get(known)) return known
+
+    const adopted = this.deps.sessions.list().find((s) => s.projectId === project.id)
+    if (adopted) {
+      this.bindProjectSession(project.id, adopted.sessionId)
+      return adopted.sessionId
+    }
+
+    const info = await this.deps.sessions.createAgentTerminal({
+      cwd: worktreePath,
+      cols: 120,
+      rows: 30,
+      runId,
+      taskId: task.id,
+      projectId: project.id,
+      title: project.name
+    })
+    this.bindProjectSession(project.id, info.sessionId)
+    return info.sessionId
+  }
+
+  private bindProjectSession(projectId: string, sessionId: string): void {
+    this.projectSessions.set(projectId, sessionId)
+    this.sessionProjects.set(sessionId, projectId)
+    if (!this.trackers.has(sessionId)) {
+      this.trackers.set(
+        sessionId,
+        new CommandTracker(
+          (data) => this.deps.sessions.write(sessionId, data),
+          (runIds, exitCode) => {
+            void this.settleRuns(runIds, exitCode).catch((e) =>
+              console.error('[agents] settle failed:', e)
+            )
+          }
+        )
+      )
+    }
+  }
+
+  /**
+   * A claude command finished (or its terminal died): commit what changed in
+   * the workbench and move exactly the tasks that rode in it to review.
+   */
+  private async settleRuns(
+    runIds: string[],
     exitCode: number | null,
     closedReason?: string
   ): Promise<void> {
-    const { runs, git } = this.deps
-    const run = runs.get(runId)
-    if (!run || (run.status !== 'queued' && run.status !== 'running')) return
-    const cancelled = this.cancelling.delete(runId)
-    const killTimer = this.killTimers.get(runId)
-    if (killTimer) {
-      clearTimeout(killTimer)
-      this.killTimers.delete(runId)
-    }
+    if (this.stopped) return
+    const { runs, tasks, git } = this.deps
+    const active = runIds
+      .map((id) => runs.get(id))
+      .filter((r): r is TaskRun => !!r && (r.status === 'queued' || r.status === 'running'))
+    if (active.length === 0) return
+    const worktreePath = active[0].worktreePath
 
     let committed = false
     try {
-      if ((await git.statusPorcelain(run.worktreePath)) !== '') {
-        const task = this.deps.tasks.get(run.taskId)
-        await git.addAllAndCommit(run.worktreePath, `orchebary: ${task?.title ?? run.taskId}`)
+      if ((await git.statusPorcelain(worktreePath)) !== '') {
+        const titles = active
+          .map((r) => tasks.get(r.taskId)?.title)
+          .filter(Boolean)
+          .join(', ')
+        await git.addAllAndCommit(worktreePath, `orchebary: ${titles || 'agent work'}`)
         committed = true
       }
     } catch (err) {
-      console.error(`[agents] auto-commit failed for run ${run.id}:`, err)
+      console.error(`[agents] auto-commit failed in ${worktreePath}:`, err)
     }
 
     let hasDiff = committed
     try {
-      const stat = await git.diffStat(run.worktreePath, run.baseRef)
+      const stat = await git.diffStat(worktreePath, active[0].baseRef)
       hasDiff = stat.filesChanged > 0
-      this.deps.broadcast({ type: 'run.diffstat', runId: run.id, taskId: run.taskId, stat })
+      for (const run of active) {
+        this.deps.broadcast({ type: 'run.diffstat', runId: run.id, taskId: run.taskId, stat })
+      }
     } catch (err) {
-      console.error(`[agents] diffstat failed for run ${run.id}:`, err)
+      console.error(`[agents] diffstat failed in ${worktreePath}:`, err)
     }
 
-    runs.finish(run.id, {
-      status: cancelled ? 'cancelled' : 'completed',
-      exitCode: exitCode ?? undefined,
-      summary: cancelled
-        ? 'cancelled by user'
-        : closedReason
-          ? `${closedReason}${hasDiff ? ' — changes ready for review' : ''}`
-          : hasDiff
-            ? 'agent finished — changes ready for review'
-            : 'agent finished — no changes'
-    })
-    this.moveTask(run.taskId, 'inreview')
-    const finished = runs.get(run.id)
-    if (finished) this.deps.broadcast({ type: 'run.status', run: finished })
+    for (const run of active) {
+      const cancelled = this.cancelling.delete(run.id)
+      const killTimer = this.killTimers.get(run.id)
+      if (killTimer) {
+        clearTimeout(killTimer)
+        this.killTimers.delete(run.id)
+      }
+      runs.finish(run.id, {
+        status: cancelled ? 'cancelled' : 'completed',
+        exitCode: exitCode ?? undefined,
+        summary: cancelled
+          ? 'cancelled by user'
+          : closedReason
+            ? `${closedReason}${hasDiff ? ' — changes ready for review' : ''}`
+            : hasDiff
+              ? 'agent session ended — changes ready for review'
+              : 'agent session ended — no changes'
+      })
+      this.moveTask(run.taskId, 'inreview')
+      const finished = runs.get(run.id)
+      if (finished) this.deps.broadcast({ type: 'run.status', run: finished })
+    }
   }
 
   /**
-   * Interrupt the agent command (ctrl-c twice exits claude) — the terminal
-   * itself survives. Hard-kills the session only if the command ignores the
-   * interrupt.
+   * Drop one task out of the queue without touching the claude session. Used
+   * for per-card cancel and when a card is dragged out of In Progress.
+   */
+  detachTask(taskId: string): void {
+    const { runs } = this.deps
+    const active = runs
+      .listForTask(taskId)
+      .find((r) => r.status === 'queued' || r.status === 'running')
+    if (!active) return
+    for (const tracker of this.trackers.values()) tracker.removePending(active.id)
+    runs.finish(active.id, { status: 'cancelled', summary: 'removed from the queue' })
+    const updated = runs.get(active.id)
+    if (updated) this.deps.broadcast({ type: 'run.status', run: updated })
+  }
+
+  /**
+   * Cancel a run. If it is the command the tracker is following, interrupt
+   * claude (ctrl-c twice) — the terminal survives; other queued runs settle
+   * with the batch. A run that is merely queued detaches silently.
    */
   cancel(runId: string): void {
     const run = this.deps.runs.get(runId)
     if (!run) throw new Error(`run ${runId} not found`)
 
     for (const [sessionId, tracker] of this.trackers) {
-      if (tracker.activeRunId === runId) {
+      if (tracker.attachedRunIds.includes(runId)) {
         this.cancelling.add(runId)
         this.deps.sessions.write(sessionId, CANCEL_INTERRUPT)
         setTimeout(() => this.deps.sessions.write(sessionId, CANCEL_INTERRUPT), 300).unref()
         const timer = setTimeout(() => {
           const still = this.trackers.get(sessionId)
-          if (still?.activeRunId === runId) this.deps.sessions.kill(sessionId)
+          if (still?.attachedRunIds.includes(runId)) this.deps.sessions.kill(sessionId)
         }, CANCEL_KILL_GRACE_MS)
         timer.unref()
         this.killTimers.set(runId, timer)
         return
       }
+      tracker.removePending(runId)
     }
 
-    // No live tracker (stale row after a crash): settle the DB directly.
     if (run.status === 'queued' || run.status === 'running') {
       this.deps.runs.finish(runId, { status: 'cancelled', summary: 'cancelled by user' })
       this.moveTask(run.taskId, 'inreview')
@@ -301,6 +293,8 @@ export class RunOrchestrator {
   stopAll(): void {
     this.stopped = true
     this.trackers.clear()
+    this.projectSessions.clear()
+    this.sessionProjects.clear()
   }
 
   async reconcileOnStartup(): Promise<void> {
@@ -322,13 +316,6 @@ export class RunOrchestrator {
     const position = tasks.keyAtColumnEnd(task.projectId, status)
     const res = tasks.move(taskId, status, position, null)
     if (res.ok) this.deps.broadcast({ type: 'task.updated', task: res.task })
-  }
-
-  private assertNoActiveRun(taskId: string): void {
-    const active = this.deps.runs
-      .listForTask(taskId)
-      .find((r) => r.status === 'queued' || r.status === 'running')
-    if (active) throw new Error('a run is already active for this task')
   }
 
   private async requireAdapter(kind: AgentKind): Promise<AgentAdapter> {
