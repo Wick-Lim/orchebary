@@ -35,8 +35,12 @@ export interface Invokables {
   'projects:archive': { req: { id: string }; res: void }
 
   'tasks:list': { req: { projectId: string }; res: Task[] }
-  /** Every in-progress task across projects — feeds the terminal-side rail. */
-  'tasks:listInProgress': { req: void; res: Array<Task & { projectName: string }> }
+  /**
+   * "Working on" = in-progress tasks plus any task that still has a live
+   * terminal session (e.g. a worktree shell opened during review). Feeds the
+   * terminal-side rail.
+   */
+  'tasks:listWorkingOn': { req: void; res: Array<Task & { projectName: string }> }
   'tasks:create': {
     req: { projectId: string; title: string; description?: string; status?: TaskStatus }
     res: Task

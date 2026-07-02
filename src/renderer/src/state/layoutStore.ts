@@ -356,12 +356,10 @@ export function initWorkspace(): Promise<void> {
         useLayoutStore.getState().handleSessionClosed(event.sessionId)
       }
     })
+    // Adopt-only: sessions are born from kanban moves (or ⌘T for a scratch
+    // shell) — booting the app spawns nothing.
     const existing = await window.orchebary.terminal.list()
     const store = useLayoutStore.getState()
-    if (existing.length === 0) {
-      await store.newTab()
-      return
-    }
     for (const info of existing) store.openSessionTab(info)
     const first = useLayoutStore.getState().tabs[0]
     if (first) useLayoutStore.setState({ activeTabId: first.id })

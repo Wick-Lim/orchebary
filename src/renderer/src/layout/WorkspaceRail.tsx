@@ -27,7 +27,7 @@ export function WorkspaceRail(): React.JSX.Element {
 
   const refresh = useCallback(() => {
     window.orchebary.tasks
-      .listInProgress()
+      .listWorkingOn()
       .then(setItems)
       .catch(() => undefined)
   }, [])

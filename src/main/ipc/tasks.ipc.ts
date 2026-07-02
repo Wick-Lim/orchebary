@@ -3,6 +3,7 @@ import path from 'node:path'
 import { z } from 'zod'
 import { getOrchestrator } from '../agents/orchestratorHandle'
 import { getDb } from '../db/database'
+import { sessionManager } from '../terminal/SessionManager'
 import { ProjectStore } from '../db/ProjectStore'
 import { TaskStore } from '../db/TaskStore'
 import { broadcast, handle } from './router'
@@ -71,7 +72,17 @@ export function registerTasksIpc(): void {
     tasks.listForProject(projectId)
   )
 
-  handle('tasks:listInProgress', null, () => tasks.listInProgress())
+  handle('tasks:listWorkingOn', null, () => {
+    const liveTaskIds = [
+      ...new Set(
+        sessionManager
+          .list()
+          .map((s) => s.taskId)
+          .filter((id): id is string => !!id)
+      )
+    ]
+    return tasks.listWorkingOn(liveTaskIds)
+  })
 
   handle(
     'tasks:create',

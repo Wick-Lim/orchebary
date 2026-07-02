@@ -86,17 +86,23 @@ export class TaskStore {
     return rows.map(toTask)
   }
 
-  /** Every in-progress task across projects, newest activity first. */
-  listInProgress(): (Task & { rev: number; projectName: string })[] {
+  /**
+   * "Working on" across projects: in-progress tasks plus any task in
+   * `liveTaskIds` (tasks that still own a live terminal session).
+   */
+  listWorkingOn(liveTaskIds: string[]): (Task & { rev: number; projectName: string })[] {
     const sql = LIST_SQL.replace('SELECT t.*,', 'SELECT t.*, p.name AS project_name,').replace(
       'FROM tasks t',
       'FROM tasks t JOIN projects p ON p.id = t.project_id'
     )
+    const placeholders = liveTaskIds.map(() => '?').join(',')
+    const liveClause = liveTaskIds.length > 0 ? ` OR t.id IN (${placeholders})` : ''
     const rows = this.db
-      .prepare<[], TaskRow & { project_name: string }>(
-        `${sql} WHERE t.status = 'inprogress' AND t.deleted_at IS NULL ORDER BY t.updated_at DESC`
+      .prepare<string[], TaskRow & { project_name: string }>(
+        `${sql} WHERE (t.status = 'inprogress'${liveClause}) AND t.deleted_at IS NULL
+         ORDER BY t.updated_at DESC`
       )
-      .all()
+      .all(...liveTaskIds)
     return rows.map((r) => ({ ...toTask(r), projectName: r.project_name }))
   }
 
