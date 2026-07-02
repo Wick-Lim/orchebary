@@ -5,6 +5,9 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import type { TerminalSessionInfo } from '../../../shared/domain'
+import { ShellIntegrationAddon } from './ShellIntegrationAddon'
+import { BlockManager } from './BlockManager'
+import { disposeBlockStore } from './blockStore'
 
 /** Browsers cap live WebGL contexts (~8-16 per page); keep a safety margin. */
 const MAX_WEBGL_CONTEXTS = 6
@@ -17,7 +20,18 @@ export interface TerminalBundle {
   /** Registry-owned DOM node, reparented between panes — never recreated. */
   container: HTMLDivElement
   webgl?: WebglAddon
+  /** Command-block pipeline — only for 'shell' sessions. */
+  integration?: ShellIntegrationAddon
+  blocks?: BlockManager
   attached: boolean
+}
+
+export interface PerfSample {
+  sessionId: string
+  /** term.write calls during the sample window. */
+  writes: number
+  /** Bytes written during the sample window. */
+  bytes: number
 }
 
 export const terminalTheme = {
@@ -63,6 +77,7 @@ class TerminalRegistry {
       window.orchebary.terminal.onData(({ sessionId, data }) => {
         const b = this.bundles.get(sessionId)
         if (!b) return
+        this.notePerf(sessionId, data.byteLength)
         // Ack after xterm has parsed the frame — this is the flow-control
         // credit that lets main resume a paused PTY.
         b.term.write(data, () => window.orchebary.terminal.ack(sessionId, data.byteLength))
@@ -113,6 +128,14 @@ class TerminalRegistry {
     term.open(container)
 
     const bundle: TerminalBundle = { info, term, fit, search, container, attached: false }
+    if (info.kind === 'shell') {
+      // Command-block pipeline: OSC events -> BlockManager -> per-session
+      // vanilla store. Agent sessions stay chrome-free plain terminals.
+      const integration = new ShellIntegrationAddon()
+      term.loadAddon(integration)
+      bundle.integration = integration
+      bundle.blocks = new BlockManager(info.sessionId, term, integration)
+    }
     this.bundles.set(info.sessionId, bundle)
     return bundle
   }
@@ -194,6 +217,11 @@ class TerminalRegistry {
   dispose(sessionId: string): void {
     const b = this.bundles.get(sessionId)
     if (!b) return
+    // Block chrome first (decorations/listeners), while the term is alive.
+    b.blocks?.dispose()
+    b.integration?.dispose()
+    disposeBlockStore(sessionId)
+    this.perf.delete(sessionId)
     this.releaseWebgl(b)
     b.term.dispose()
     b.container.remove()
@@ -202,6 +230,33 @@ class TerminalRegistry {
 
   list(): TerminalBundle[] {
     return [...this.bundles.values()]
+  }
+
+  // ---------------------------------------------------------------------------
+  // Perf HUD counters (dev aid) — accumulated in the onData write path.
+
+  private perf = new Map<string, { writes: number; bytes: number }>()
+
+  private notePerf(sessionId: string, bytes: number): void {
+    const p = this.perf.get(sessionId)
+    if (p) {
+      p.writes += 1
+      p.bytes += bytes
+    } else {
+      this.perf.set(sessionId, { writes: 1, bytes })
+    }
+  }
+
+  /** Counters accumulated since the previous call, for attached sessions; resets. */
+  samplePerf(): PerfSample[] {
+    const out: PerfSample[] = []
+    for (const b of this.bundles.values()) {
+      if (!b.attached) continue
+      const p = this.perf.get(b.info.sessionId)
+      out.push({ sessionId: b.info.sessionId, writes: p?.writes ?? 0, bytes: p?.bytes ?? 0 })
+    }
+    this.perf.clear()
+    return out
   }
 }
 

@@ -1,0 +1,302 @@
+/* Command-block chrome: header decorations, sticky header, inspector, perf HUD.
+   Dark-first, driven by the theme tokens in main.css. */
+
+.orb-terminal-wrap {
+  position: relative;
+  display: flex;
+}
+
+.orb-terminal-mount {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Block header (portal target is the xterm decoration element on the prompt
+   row; the same chrome renders inside the sticky strip). */
+
+.orb-block-anchor {
+  overflow: visible;
+}
+
+.orb-block-header {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 6px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--fg-muted);
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+  cursor: default;
+}
+
+.orb-block-cwd {
+  flex: 0 1 auto;
+  max-width: 22%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+
+.orb-block-prompt-glyph {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.orb-block-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--fg);
+}
+
+.orb-block-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.orb-block-header:hover .orb-block-actions,
+.orb-block-header:focus-within .orb-block-actions {
+  opacity: 1;
+}
+
+.orb-block-actions button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.orb-block-actions button:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--border);
+  background: var(--bg-overlay);
+}
+
+.orb-block-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.orb-block-meta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.orb-block-duration {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+}
+
+/* Exit badges pair a distinct glyph with the color (colorblind-safe). */
+.orb-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.orb-badge-ok {
+  color: var(--success);
+}
+
+.orb-badge-err {
+  color: var(--danger);
+}
+
+.orb-badge-alt {
+  color: var(--warning);
+}
+
+.orb-badge-running {
+  color: var(--accent);
+  animation: orb-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes orb-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Sticky header — pinned strip over the terminal's top edge. */
+
+.orb-sticky-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.orb-sticky-header .orb-block-header {
+  pointer-events: auto;
+  height: 24px;
+  background: var(--bg-overlay);
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* ---------------------------------------------------------------------------
+   Block inspector — right-side overlay panel inside the terminal area. */
+
+.orb-inspector {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: min(46%, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+}
+
+.orb-inspector-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.orb-inspector-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.orb-inspector-close {
+  flex: 0 0 auto;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.orb-inspector-close:hover {
+  color: var(--fg);
+  border-color: var(--border);
+  background: var(--bg-overlay);
+}
+
+.orb-inspector-filter {
+  flex: 0 0 auto;
+  margin: 8px 10px 0;
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  outline: none;
+}
+
+.orb-inspector-filter:focus {
+  border-color: var(--accent);
+}
+
+.orb-inspector-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 8px 0 0;
+  padding: 0 10px 10px;
+  overflow: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fg);
+  white-space: pre;
+}
+
+.orb-inspector-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--fg-muted);
+}
+
+.orb-inspector-cwd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+/* ---------------------------------------------------------------------------
+   Perf HUD (dev aid, enabled via localStorage 'orb.hud' = '1'). */
+
+.orb-perf-hud {
+  position: fixed;
+  top: 44px;
+  right: 10px;
+  z-index: 50;
+  padding: 5px 8px;
+  background: rgba(13, 16, 23, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+  pointer-events: none;
+}
+
+.orb-perf-row {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.orb-perf-id {
+  color: var(--accent);
+}

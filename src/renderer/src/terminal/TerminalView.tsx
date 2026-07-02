@@ -1,10 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { terminalRegistry } from './TerminalRegistry'
+import { StickyBlockHeader } from './StickyBlockHeader'
+import { BlockPortals } from './BlockPortals'
+import { BlockInspector } from './BlockInspector'
+import { PerfHud } from './PerfHud'
+import '../assets/blocks.css'
 
 /**
  * Mount point for a registry-owned xterm instance. The terminal DOM is
  * reparented in (never recreated), so scrollback survives pane moves,
- * tab switches, and React remounts.
+ * tab switches, and React remounts. Block chrome (sticky header, header
+ * portals, inspector) renders around it; sessions without shell integration
+ * (e.g. kind 'agent') get a clean plain terminal — all chrome renders null.
  */
 export function TerminalView({
   sessionId,
@@ -37,5 +44,13 @@ export function TerminalView({
     }
   }, [sessionId, autoFocus])
 
-  return <div ref={hostRef} className="terminal-view" />
+  return (
+    <div className="terminal-view orb-terminal-wrap">
+      <div ref={hostRef} className="orb-terminal-mount" />
+      <StickyBlockHeader sessionId={sessionId} />
+      <BlockPortals sessionId={sessionId} />
+      <BlockInspector sessionId={sessionId} />
+      <PerfHud />
+    </div>
+  )
 }
