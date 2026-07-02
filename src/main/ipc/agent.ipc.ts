@@ -139,9 +139,12 @@ export function registerAgentIpc(): void {
       rows: z.number().int().min(1).max(1000)
     }),
     ({ runId, cols, rows }) => {
-      const run = requireRun(runId)
+      const { run, task } = requireContext(runId)
       if (!existsSync(run.worktreePath)) throw new Error('worktree no longer exists')
-      return sessionManager.createShell({ cwd: run.worktreePath, cols, rows })
+      return sessionManager.createShell(
+        { cwd: run.worktreePath, cols, rows },
+        { runId, taskId: run.taskId, title: task.title }
+      )
     }
   )
 

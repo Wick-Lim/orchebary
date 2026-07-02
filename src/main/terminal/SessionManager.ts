@@ -41,7 +41,10 @@ export class SessionManager {
   private exitListeners = new Set<ExitListener>()
   private lifecycleListeners = new Set<LifecycleListener>()
 
-  async createShell(req: CreateTerminalRequest): Promise<TerminalSessionInfo> {
+  async createShell(
+    req: CreateTerminalRequest,
+    meta?: { runId?: string; taskId?: string; title?: string }
+  ): Promise<TerminalSessionInfo> {
     const sessionId = nanoid()
     const baseEnv = await captureLoginShellEnv()
     const shell = defaultShell()
@@ -60,15 +63,20 @@ export class SessionManager {
     // empty dir to isolate from the user's dotfiles).
     Object.assign(env, req.env)
 
-    return this.register(sessionId, 'shell', {
-      file: shell,
-      args: ['-il'],
-      cwd,
-      cols: req.cols,
-      rows: req.rows,
-      env,
-      title: path.basename(cwd)
-    })
+    return this.register(
+      sessionId,
+      'shell',
+      {
+        file: shell,
+        args: ['-il'],
+        cwd,
+        cols: req.cols,
+        rows: req.rows,
+        env,
+        title: meta?.title ?? path.basename(cwd)
+      },
+      meta?.runId || meta?.taskId ? { runId: meta.runId, taskId: meta.taskId } : undefined
+    )
   }
 
   /** Spawn an arbitrary command (e.g. `claude --resume`) under a PTY. */
@@ -104,7 +112,7 @@ export class SessionManager {
       env: Record<string, string>
       title: string
     },
-    extra?: { runId: string; taskId: string }
+    extra?: { runId?: string; taskId?: string }
   ): TerminalSessionInfo {
     const pty = ptySpawn(spawn.file, spawn.args, {
       name: 'xterm-256color',

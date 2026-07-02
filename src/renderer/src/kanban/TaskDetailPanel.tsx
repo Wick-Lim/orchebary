@@ -110,6 +110,17 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
   const running = run?.status === 'running' || run?.status === 'queued'
   const selectedRun = runs.find((r) => r.id === selectedRunId)
 
+  function jumpToTerminal(): void {
+    void act('Go to terminal failed', async () => {
+      const list = await window.orchebary.terminal.list()
+      const s =
+        list.find((x) => x.kind === 'agent' && x.taskId === task.id) ??
+        list.find((x) => x.taskId === task.id)
+      if (s) useUiStore.getState().requestOpenSession(s)
+      else showToast('터미널 세션을 찾을 수 없습니다')
+    })
+  }
+
   return (
     <div className="task-panel">
       <div className="task-panel-head">
@@ -197,6 +208,11 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
               Start Agent
             </button>
           )}
+          {running && (
+            <button className="btn btn-primary" disabled={busy} onClick={jumpToTerminal}>
+              Go to terminal
+            </button>
+          )}
           {running && run && (
             <button
               className="btn btn-danger"
@@ -225,7 +241,7 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
               Merge to main
             </button>
           )}
-          {run && (
+          {run && !running && (
             <button
               className="btn"
               disabled={busy}
@@ -315,6 +331,18 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
               <span className="run-row-time">{fmtTime(r.startedAt ?? r.createdAt)}</span>
               <span className="run-row-duration">{fmtDuration(r.startedAt, r.finishedAt)}</span>
               {r.summary && <span className="run-row-summary">{r.summary}</span>}
+              {(r.status === 'running' || r.status === 'queued') && (
+                <span
+                  className="run-row-jump"
+                  title="Go to terminal"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    jumpToTerminal()
+                  }}
+                >
+                  ↗
+                </span>
+              )}
             </button>
           ))}
         </div>
