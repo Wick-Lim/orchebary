@@ -7,6 +7,7 @@ import { z } from 'zod'
 import type { Project, Task, TaskRun } from '../../shared/domain'
 import { GitService } from '../agents/GitService'
 import { getAdapter, listAvailability } from '../agents/registry'
+import { setOrchestrator } from '../agents/orchestratorHandle'
 import { RunOrchestrator } from '../agents/RunOrchestrator'
 import { WorktreeManager } from '../agents/WorktreeManager'
 import { getDb } from '../db/database'
@@ -33,9 +34,10 @@ export function registerAgentIpc(): void {
     runs,
     git,
     worktrees,
-    broadcast: (event) => broadcast('app:event', event),
-    logDir: path.join(app.getPath('userData'), 'runs')
+    sessions: sessionManager,
+    broadcast: (event) => broadcast('app:event', event)
   })
+  setOrchestrator(orchestrator)
 
   function requireRun(runId: string): TaskRun {
     const run = runs.get(runId)

@@ -3,7 +3,7 @@ import './assets/workspace.css'
 import { BoardPage } from './kanban/BoardPage'
 import { installKeybindings } from './layout/KeybindingService'
 import { PaneLayout } from './layout/PaneLayout'
-import { TabBar } from './layout/TabBar'
+import { WorkspaceRail } from './layout/WorkspaceRail'
 import { registerBuiltinActions } from './palette/actions'
 import { PaletteHost } from './palette/PaletteHost'
 import { initWorkspace, useLayoutStore } from './state/layoutStore'
@@ -67,8 +67,10 @@ export default function App(): React.JSX.Element {
         className="workspace terminal-workspace"
         style={activeView === 'terminal' ? undefined : { display: 'none' }}
       >
-        <TabBar />
-        <PaneLayout />
+        <WorkspaceRail />
+        <div className="terminal-main">
+          <PaneLayout />
+        </div>
       </div>
       {activeView === 'board' && (
         <div className="workspace">

@@ -65,6 +65,7 @@ const api = {
 
   tasks: {
     list: (projectId: string) => invoke('tasks:list', { projectId }),
+    listInProgress: () => invoke('tasks:listInProgress', undefined),
     create: (req: { projectId: string; title: string; description?: string; status?: TaskStatus }) =>
       invoke('tasks:create', req),
     update: (id: string, patch: { title?: string; description?: string }) =>

@@ -15,6 +15,7 @@ import {
   type SplitDir
 } from '../layout/tree'
 import type { Workflow } from '../palette/workflows'
+import { useUiStore } from './uiStore'
 
 export interface Tab {
   id: string
@@ -120,8 +121,15 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
       if (!wf) focusActiveTerminal()
     },
 
-    registerSession: (info) =>
-      set((state) => ({ sessions: { ...state.sessions, [info.sessionId]: info } })),
+    registerSession: (info) => {
+      set((state) => ({ sessions: { ...state.sessions, [info.sessionId]: info } }))
+      // Agent sessions (kanban-started claude runs) surface themselves: open a
+      // tab bound to the session and bring the terminal view forward.
+      if (info.kind === 'agent') {
+        get().revealSession(info)
+        useUiStore.getState().setActiveView('terminal')
+      }
+    },
 
     handleSessionClosed: (sessionId) =>
       set((state) => {

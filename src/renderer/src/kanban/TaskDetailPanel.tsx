@@ -1,6 +1,7 @@
 import { generateKeyBetween } from 'fractional-indexing'
 import { useEffect, useState } from 'react'
 import type { TaskRun } from '../../../shared/domain'
+import { TASK_STATUS_LABEL } from '../../../shared/domain'
 import { useBoardStore, type BoardTask } from '../state/boardStore'
 import { useUiStore } from '../state/uiStore'
 import { DiffView } from './DiffView'
@@ -31,6 +32,7 @@ function fmtDuration(start?: string, end?: string): string {
 export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Element {
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
+  const [editingDesc, setEditingDesc] = useState(false)
   const [followUp, setFollowUp] = useState('')
   const [runs, setRuns] = useState<TaskRun[]>([])
   const [runsError, setRunsError] = useState<string | null>(null)
@@ -126,15 +128,59 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
       </div>
 
       <div className="task-panel-body">
+        <div className="panel-meta">
+          <div className="panel-meta-row">
+            <span className="panel-meta-label">Status</span>
+            <span className={`panel-status-chip status-${task.status}`}>
+              {TASK_STATUS_LABEL[task.status]}
+            </span>
+          </div>
+          {run && (
+            <div className="panel-meta-row">
+              <span className="panel-meta-label">Agent</span>
+              <span className="panel-meta-value">
+                <span className={`dot ${RUN_DOT_CLASS[run.status]}`} /> {run.agentKind}
+              </span>
+            </div>
+          )}
+          {run?.branch && (
+            <div className="panel-meta-row">
+              <span className="panel-meta-label">Branch</span>
+              <span className="panel-meta-value mono">{run.branch}</span>
+            </div>
+          )}
+          <div className="panel-meta-row">
+            <span className="panel-meta-label">Created</span>
+            <span className="panel-meta-value">{fmtTime(task.createdAt)}</span>
+          </div>
+          <div className="panel-meta-row">
+            <span className="panel-meta-label">Updated</span>
+            <span className="panel-meta-value">{fmtTime(task.updatedAt)}</span>
+          </div>
+        </div>
+
         <div className="panel-section">
-          <div className="panel-section-title">Prompt</div>
-          <textarea
-            className="panel-desc"
-            placeholder="Describe what the agent should do…"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={saveDescription}
-          />
+          <div className="panel-section-title">Description</div>
+          {editingDesc ? (
+            <textarea
+              className="panel-desc"
+              autoFocus
+              placeholder="Add a description…"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => {
+                saveDescription()
+                setEditingDesc(false)
+              }}
+            />
+          ) : (
+            <div
+              className={`panel-desc-view${description.trim() ? '' : ' is-empty'}`}
+              onClick={() => setEditingDesc(true)}
+            >
+              {description.trim() || 'Add a description…'}
+            </div>
+          )}
         </div>
 
         <div className="panel-actions">
@@ -254,7 +300,7 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
         )}
 
         <div className="panel-section">
-          <div className="panel-section-title">Runs</div>
+          <div className="panel-section-title">Activity</div>
           {runsError && <div className="panel-note">Run history unavailable: {runsError}</div>}
           {!runsError && runs.length === 0 && <div className="panel-note">No runs yet</div>}
           {runs.map((r) => (

@@ -31,6 +31,10 @@ export interface AgentAdapter {
     worktreePath: string
     sessionId: string
   }): AgentSpawnSpec
+  /** Interactive TUI run inside a PTY — the plan-first kanban workflow. */
+  buildInteractiveSpawn(opts: { prompt: string; worktreePath: string }): AgentSpawnSpec
+  /** Interactive continuation of the most recent conversation in the worktree. */
+  buildInteractiveFollowUpSpawn(opts: { prompt: string; worktreePath: string }): AgentSpawnSpec
   createParser(): AgentOutputParser
   interpretExit(
     code: number | null,

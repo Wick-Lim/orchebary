@@ -35,6 +35,8 @@ export interface Invokables {
   'projects:archive': { req: { id: string }; res: void }
 
   'tasks:list': { req: { projectId: string }; res: Task[] }
+  /** Every in-progress task across projects — feeds the terminal-side rail. */
+  'tasks:listInProgress': { req: void; res: Array<Task & { projectName: string }> }
   'tasks:create': {
     req: { projectId: string; title: string; description?: string; status?: TaskStatus }
     res: Task

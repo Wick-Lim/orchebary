@@ -86,6 +86,20 @@ export class TaskStore {
     return rows.map(toTask)
   }
 
+  /** Every in-progress task across projects, newest activity first. */
+  listInProgress(): (Task & { rev: number; projectName: string })[] {
+    const sql = LIST_SQL.replace('SELECT t.*,', 'SELECT t.*, p.name AS project_name,').replace(
+      'FROM tasks t',
+      'FROM tasks t JOIN projects p ON p.id = t.project_id'
+    )
+    const rows = this.db
+      .prepare<[], TaskRow & { project_name: string }>(
+        `${sql} WHERE t.status = 'inprogress' AND t.deleted_at IS NULL ORDER BY t.updated_at DESC`
+      )
+      .all()
+    return rows.map((r) => ({ ...toTask(r), projectName: r.project_name }))
+  }
+
   get(id: string): (Task & { rev: number }) | undefined {
     const row = this.db.prepare<[string], TaskRow>(`${LIST_SQL} WHERE t.id = ?`).get(id)
     return row ? toTask(row) : undefined

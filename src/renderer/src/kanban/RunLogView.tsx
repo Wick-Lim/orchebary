@@ -89,7 +89,12 @@ export function RunLogView({ run }: { run: TaskRun }): React.JSX.Element {
       }}
     >
       {error && <div className="panel-note">Log unavailable: {error}</div>}
-      {!error && events.length === 0 && <div className="panel-note">No output yet</div>}
+      {!error && events.length === 0 && (
+        <div className="panel-note">
+          Interactive session — the conversation lives in its terminal tab. Check the Diff tab for
+          the resulting changes.
+        </div>
+      )}
       {events.map((ev, i) => (
         <LogEvent key={i} ev={ev} />
       ))}

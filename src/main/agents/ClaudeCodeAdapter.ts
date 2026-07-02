@@ -179,6 +179,25 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     }
   }
 
+  buildInteractiveSpawn(opts: { prompt: string; worktreePath: string }): AgentSpawnSpec {
+    // Interactive REPL, starting in plan mode with the task as the first prompt.
+    return {
+      command: 'claude',
+      args: ['--permission-mode', 'plan', opts.prompt],
+      cwd: opts.worktreePath
+    }
+  }
+
+  buildInteractiveFollowUpSpawn(opts: { prompt: string; worktreePath: string }): AgentSpawnSpec {
+    // --continue picks up the most recent conversation in this cwd (the
+    // worktree is per-task, so this is deterministic without a session id).
+    return {
+      command: 'claude',
+      args: ['--continue', '--permission-mode', 'plan', opts.prompt],
+      cwd: opts.worktreePath
+    }
+  }
+
   createParser(): AgentOutputParser {
     return new ClaudeStreamParser()
   }

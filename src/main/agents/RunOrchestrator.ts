@@ -1,20 +1,9 @@
-import { spawn, type ChildProcess } from 'node:child_process'
-import { createWriteStream, existsSync } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
-import path from 'node:path'
-import { v7 as uuidv7 } from 'uuid'
-import type {
-  AgentEvent,
-  AgentKind,
-  AppEvent,
-  Task,
-  TaskRun,
-  TaskStatus
-} from '../../shared/domain'
+import { existsSync } from 'node:fs'
+import type { AgentKind, AppEvent, Task, TaskRun, TaskStatus } from '../../shared/domain'
 import type { ProjectStore } from '../db/ProjectStore'
 import type { RunStore } from '../db/RunStore'
 import type { TaskStore } from '../db/TaskStore'
-import { captureLoginShellEnv } from '../terminal/shellEnv'
+import type { SessionManager } from '../terminal/SessionManager'
 import type { AgentAdapter, AgentSpawnSpec } from './AgentAdapter'
 import type { GitService } from './GitService'
 import { getAdapter } from './registry'
@@ -26,32 +15,33 @@ export interface OrchestratorDeps {
   runs: RunStore
   git: GitService
   worktrees: WorktreeManager
+  sessions: SessionManager
   broadcast: (event: AppEvent) => void
-  logDir: string
 }
-
-const OUTPUT_FLUSH_MS = 100
-const KILL_GRACE_MS = 5000
 
 function defaultPrompt(task: Task): string {
   return `Task: ${task.title}\n\n${task.description}`
 }
 
 /**
- * Drives the run lifecycle: worktree allocation -> headless agent spawn ->
- * NDJSON streaming -> auto-commit -> kanban transitions. One child process
- * per run, tracked so cancel/quit can kill the whole (detached) group.
+ * Drives the plan-first run lifecycle: worktree allocation -> interactive
+ * claude session in a real terminal (plan mode, task as the first prompt) ->
+ * on session exit: auto-commit -> diff stat -> kanban moves to In Review.
  */
 export class RunOrchestrator {
-  private children = new Map<string, ChildProcess>()
+  /** Live interactive PTY runs: terminal sessionId -> runId. */
+  private interactiveRuns = new Map<string, string>()
   private cancelling = new Set<string>()
-  private killTimers = new Map<string, NodeJS.Timeout>()
-  private pendingEvents = new Map<string, AgentEvent[]>()
-  private flushTimers = new Map<string, NodeJS.Timeout>()
   /** Set during before-quit: exit handlers must not touch the closing DB. */
   private stopped = false
 
-  constructor(private deps: OrchestratorDeps) {}
+  constructor(private deps: OrchestratorDeps) {
+    deps.sessions.onExit((sessionId, exitCode) => {
+      void this.finalizeInteractive(sessionId, exitCode).catch((e) =>
+        console.error('[agents] interactive finalize failed:', e)
+      )
+    })
+  }
 
   async start(taskId: string, agentKind?: AgentKind, prompt?: string): Promise<TaskRun> {
     const { tasks, projects, runs, worktrees } = this.deps
@@ -72,14 +62,13 @@ export class RunOrchestrator {
       prompt: effectivePrompt,
       worktreePath,
       branch,
-      baseRef,
-      logPath: await this.newLogPath()
+      baseRef
     })
     this.moveTask(taskId, 'inprogress')
     this.deps.broadcast({ type: 'run.status', run })
 
-    const spec = adapter.buildSpawn({ prompt: effectivePrompt, worktreePath })
-    return this.launch(run, task, adapter, spec)
+    const spec = adapter.buildInteractiveSpawn({ prompt: effectivePrompt, worktreePath })
+    return this.launchInteractive(run, task, spec)
   }
 
   async followUp(taskId: string, prompt: string): Promise<TaskRun> {
@@ -89,10 +78,9 @@ export class RunOrchestrator {
     this.assertNoActiveRun(taskId)
 
     const latest = runs.latestForTask(taskId)
-    if (!latest || (latest.status !== 'completed' && latest.status !== 'failed')) {
+    if (!latest || latest.status === 'queued' || latest.status === 'running') {
       throw new Error('no finished run to follow up on')
     }
-    if (!latest.agentSessionId) throw new Error('previous run left no agent session to resume')
     if (!existsSync(latest.worktreePath)) {
       throw new Error('worktree no longer exists; start a fresh run instead')
     }
@@ -108,51 +96,44 @@ export class RunOrchestrator {
       parentRunId: latest.id,
       worktreePath: latest.worktreePath,
       branch: latest.branch,
-      baseRef: latest.baseRef,
-      logPath: await this.newLogPath()
+      baseRef: latest.baseRef
     })
     this.moveTask(taskId, 'inprogress')
     this.deps.broadcast({ type: 'run.status', run })
 
-    const spec = adapter.buildFollowUpSpawn({
+    const spec = adapter.buildInteractiveFollowUpSpawn({
       prompt,
-      worktreePath: latest.worktreePath,
-      sessionId: latest.agentSessionId
+      worktreePath: latest.worktreePath
     })
-    return this.launch(run, task, adapter, spec)
+    return this.launchInteractive(run, task, spec)
   }
 
   cancel(runId: string): void {
     const run = this.deps.runs.get(runId)
     if (!run) throw new Error(`run ${runId} not found`)
-    const child = this.children.get(runId)
-    if (!child) {
-      // No live child (e.g. stale row): settle the DB state directly.
-      if (run.status === 'queued' || run.status === 'running') {
-        this.deps.runs.finish(runId, { status: 'cancelled', summary: 'cancelled by user' })
-        this.moveTask(run.taskId, 'inreview')
-        const updated = this.deps.runs.get(runId)
-        if (updated) this.deps.broadcast({ type: 'run.status', run: updated })
+
+    for (const [sessionId, rid] of this.interactiveRuns) {
+      if (rid === runId) {
+        // Settles through the PTY exit handler.
+        this.cancelling.add(runId)
+        this.deps.sessions.kill(sessionId)
+        return
       }
-      return
     }
-    this.cancelling.add(runId)
-    this.signal(child, 'SIGTERM')
-    const timer = setTimeout(() => {
-      const alive = this.children.get(runId)
-      if (alive) this.signal(alive, 'SIGKILL')
-    }, KILL_GRACE_MS)
-    timer.unref()
-    this.killTimers.set(runId, timer)
+
+    // No live session (e.g. stale row after a crash): settle the DB directly.
+    if (run.status === 'queued' || run.status === 'running') {
+      this.deps.runs.finish(runId, { status: 'cancelled', summary: 'cancelled by user' })
+      this.moveTask(run.taskId, 'inreview')
+      const updated = this.deps.runs.get(runId)
+      if (updated) this.deps.broadcast({ type: 'run.status', run: updated })
+    }
   }
 
-  /** before-quit: hard-kill every process group; reconcileOnStartup cleans up. */
+  /** before-quit: PTYs die via SessionManager.disposeAll; keep off the DB. */
   stopAll(): void {
     this.stopped = true
-    for (const [runId, child] of this.children) {
-      this.cancelling.add(runId)
-      this.signal(child, 'SIGKILL')
-    }
+    this.interactiveRuns.clear()
   }
 
   async reconcileOnStartup(): Promise<void> {
@@ -168,147 +149,79 @@ export class RunOrchestrator {
 
   // -------------------------------------------------------------------------
 
-  private async launch(
+  private async launchInteractive(
     run: TaskRun,
     task: Task,
-    adapter: AgentAdapter,
     spec: AgentSpawnSpec
   ): Promise<TaskRun> {
-    const { runs, git } = this.deps
-    const env = await captureLoginShellEnv()
-    const parser = adapter.createParser()
-    const log = createWriteStream(run.logPath!, { flags: 'a' })
-    let finalized = false
-
-    // detached => own process group, so cancel can kill the whole tree.
-    const child = spawn(spec.command, spec.args, {
-      cwd: spec.cwd,
-      env,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    this.children.set(run.id, child)
-
-    if (child.stdout) {
-      child.stdout.setEncoding('utf8')
-      child.stdout.on('data', (chunk: string) => {
-        log.write(chunk)
-        this.queueOutput(run.id, task.id, parser.push(chunk))
-      })
-    }
-    if (child.stderr) {
-      child.stderr.setEncoding('utf8')
-      child.stderr.on('data', (chunk: string) => {
-        // Prefixed lines fail NDJSON parsing and surface as 'raw' on readLog.
-        log.write(
-          chunk
-            .split('\n')
-            .map((l) => (l ? `[stderr] ${l}` : l))
-            .join('\n')
-        )
-      })
-    }
-
-    const finalize = async (code: number | null): Promise<void> => {
-      if (finalized) return
-      finalized = true
-      this.children.delete(run.id)
-      const killTimer = this.killTimers.get(run.id)
-      if (killTimer) {
-        clearTimeout(killTimer)
-        this.killTimers.delete(run.id)
-      }
-      this.queueOutput(run.id, task.id, parser.flush())
-      this.flushOutput(run.id, task.id)
-      log.end()
-      const cancelled = this.cancelling.delete(run.id)
-      if (this.stopped) return // app is quitting; DB is closing
-
-      try {
-        if ((await git.statusPorcelain(run.worktreePath)) !== '') {
-          await git.addAllAndCommit(run.worktreePath, `orchebary: ${task.title}`)
-        }
-      } catch (err) {
-        console.error(`[agents] auto-commit failed for run ${run.id}:`, err)
-      }
-
-      const outcome = adapter.interpretExit(code, parser.lastResult)
-      runs.finish(run.id, {
-        status: cancelled ? 'cancelled' : outcome.status,
-        exitCode: code ?? undefined,
-        summary: cancelled ? 'cancelled by user' : outcome.summary,
-        agentSessionId: parser.sessionId,
-        costUsd: parser.lastResult?.costUsd,
-        numTurns: parser.lastResult?.numTurns
-      })
-
-      try {
-        const stat = await git.diffStat(run.worktreePath, run.baseRef)
-        this.deps.broadcast({ type: 'run.diffstat', runId: run.id, taskId: task.id, stat })
-      } catch (err) {
-        console.error(`[agents] diffstat failed for run ${run.id}:`, err)
-      }
-
-      this.moveTask(task.id, 'inreview')
-      const finished = runs.get(run.id)
-      if (finished) this.deps.broadcast({ type: 'run.status', run: finished })
-    }
-
-    child.once('error', (err) => {
-      log.write(`[orchebary] spawn error: ${err.message}\n`)
-      void finalize(null).catch((e) => console.error('[agents] finalize failed:', e))
-    })
-    child.once('close', (code) => {
-      void finalize(code).catch((e) => console.error('[agents] finalize failed:', e))
-    })
-
-    if (child.pid) {
-      runs.markRunning(run.id, child.pid)
-      const running = runs.get(run.id)
-      if (running) this.deps.broadcast({ type: 'run.status', run: running })
-    }
-    return runs.get(run.id) ?? run
-  }
-
-  private signal(child: ChildProcess, sig: NodeJS.Signals): void {
+    const { runs, sessions } = this.deps
     try {
-      // Negative pid targets the detached process group.
-      if (child.pid) process.kill(-child.pid, sig)
-      else child.kill(sig)
-    } catch {
-      try {
-        child.kill(sig)
-      } catch {
-        // already gone
+      const info = await sessions.createAgentTerminal({
+        cwd: spec.cwd,
+        cols: 120,
+        rows: 30,
+        command: spec.command,
+        args: spec.args,
+        runId: run.id,
+        taskId: task.id,
+        title: task.title
+      })
+      this.interactiveRuns.set(info.sessionId, run.id)
+      runs.markRunning(run.id, info.pid)
+    } catch (err) {
+      runs.finish(run.id, {
+        status: 'failed',
+        summary: `failed to launch agent terminal: ${err instanceof Error ? err.message : err}`
+      })
+      this.moveTask(task.id, 'inreview')
+    }
+    const current = runs.get(run.id) ?? run
+    this.deps.broadcast({ type: 'run.status', run: current })
+    return current
+  }
+
+  /** PTY exit of an interactive agent session settles its run. */
+  private async finalizeInteractive(sessionId: string, exitCode: number): Promise<void> {
+    const runId = this.interactiveRuns.get(sessionId)
+    if (!runId) return
+    this.interactiveRuns.delete(sessionId)
+    const cancelled = this.cancelling.delete(runId)
+    if (this.stopped) return // app is quitting; DB is closing
+
+    const { runs, git } = this.deps
+    const run = runs.get(runId)
+    if (!run || (run.status !== 'queued' && run.status !== 'running')) return
+
+    let committed = false
+    try {
+      if ((await git.statusPorcelain(run.worktreePath)) !== '') {
+        const task = this.deps.tasks.get(run.taskId)
+        await git.addAllAndCommit(run.worktreePath, `orchebary: ${task?.title ?? run.taskId}`)
+        committed = true
       }
+    } catch (err) {
+      console.error(`[agents] auto-commit failed for run ${run.id}:`, err)
     }
-  }
 
-  private queueOutput(runId: string, taskId: string, events: AgentEvent[]): void {
-    if (events.length === 0) return
-    const pending = this.pendingEvents.get(runId)
-    if (pending) pending.push(...events)
-    else this.pendingEvents.set(runId, [...events])
-    // Trailing-edge throttle: at most one run.output broadcast per 100ms.
-    if (!this.flushTimers.has(runId)) {
-      this.flushTimers.set(
-        runId,
-        setTimeout(() => this.flushOutput(runId, taskId), OUTPUT_FLUSH_MS)
-      )
+    let hasDiff = committed
+    try {
+      const stat = await git.diffStat(run.worktreePath, run.baseRef)
+      hasDiff = stat.filesChanged > 0
+      this.deps.broadcast({ type: 'run.diffstat', runId: run.id, taskId: run.taskId, stat })
+    } catch (err) {
+      console.error(`[agents] diffstat failed for run ${run.id}:`, err)
     }
-  }
 
-  private flushOutput(runId: string, taskId: string): void {
-    const timer = this.flushTimers.get(runId)
-    if (timer) {
-      clearTimeout(timer)
-      this.flushTimers.delete(runId)
-    }
-    const events = this.pendingEvents.get(runId)
-    this.pendingEvents.delete(runId)
-    if (events && events.length > 0) {
-      this.deps.broadcast({ type: 'run.output', runId, taskId, events })
-    }
+    runs.finish(run.id, {
+      status: cancelled ? 'cancelled' : exitCode === 0 ? 'completed' : 'failed',
+      exitCode,
+      summary: cancelled
+        ? 'cancelled by user'
+        : `interactive session ended${hasDiff ? ' — changes ready for review' : ' — no changes'}`
+    })
+    this.moveTask(run.taskId, 'inreview')
+    const finished = runs.get(run.id)
+    if (finished) this.deps.broadcast({ type: 'run.status', run: finished })
   }
 
   private moveTask(taskId: string, status: TaskStatus): void {
@@ -335,11 +248,5 @@ export class RunOrchestrator {
       throw new Error(availability.problem ?? `${adapter.displayName} is unavailable`)
     }
     return adapter
-  }
-
-  // RunStore generates run ids internally, so log files get their own uuid.
-  private async newLogPath(): Promise<string> {
-    await mkdir(this.deps.logDir, { recursive: true })
-    return path.join(this.deps.logDir, `${uuidv7()}.ndjson`)
   }
 }

@@ -43,7 +43,113 @@
 /* ---------------------------------------------------------------- tab bar */
 
 .terminal-workspace {
+  flex-direction: row;
+}
+
+.terminal-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
+}
+
+/* In-progress issue rail (left of the terminal) */
+.task-rail {
+  flex: 0 0 232px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-raised);
+  overflow-y: auto;
+}
+
+.task-rail-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.task-rail-count {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+  font-weight: 500;
+}
+
+.task-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-rail-item:hover {
+  background: var(--bg-overlay);
+}
+
+.task-rail-item.no-session {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.task-rail-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.task-rail-dot.is-running {
+  background: var(--accent);
+  animation: rail-pulse 1.6s ease-in-out infinite;
+}
+
+.task-rail-dot.is-failed {
+  background: var(--danger);
+}
+
+.task-rail-dot.is-idle {
+  background: var(--fg-muted);
+}
+
+@keyframes rail-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.task-rail-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-rail-project {
+  flex: 0 0 auto;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--fg-muted);
 }
 
 .tab-bar {
@@ -510,4 +616,68 @@
   justify-content: center;
   color: var(--fg-muted);
   cursor: default;
+}
+
+/* Rail as primary navigation (no top tab strip) */
+.rail-empty {
+  padding: 4px 8px 10px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+.rail-terminals-header {
+  margin-top: 12px;
+  justify-content: space-between;
+}
+
+.rail-add {
+  border: none;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.rail-add:hover {
+  background: var(--bg-overlay);
+  color: var(--fg);
+}
+
+.task-rail-item.is-active {
+  background: var(--bg-overlay);
+}
+
+.task-rail-item.is-active .task-rail-title {
+  color: var(--accent);
+}
+
+.rail-shell-glyph {
+  flex: 0 0 auto;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.task-rail-close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: transparent;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.task-rail-item:hover .task-rail-close {
+  color: var(--fg-muted);
+}
+
+.task-rail-close:hover {
+  color: var(--danger);
 }

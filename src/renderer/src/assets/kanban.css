@@ -756,3 +756,84 @@
 .toast-info {
   border-left-color: var(--success);
 }
+
+/* Jira-style issue meta + description */
+.panel-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.panel-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.panel-meta-label {
+  flex: 0 0 72px;
+  color: var(--fg-muted);
+}
+
+.panel-meta-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-meta-value.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.panel-status-chip {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-overlay);
+}
+
+.panel-status-chip.status-inprogress {
+  background: rgba(108, 178, 247, 0.16);
+  color: var(--accent);
+}
+
+.panel-status-chip.status-inreview {
+  background: rgba(229, 192, 123, 0.16);
+  color: var(--warning);
+}
+
+.panel-status-chip.status-done {
+  background: rgba(123, 216, 143, 0.16);
+  color: var(--success);
+}
+
+.panel-desc-view {
+  min-height: 48px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  cursor: text;
+  user-select: text;
+}
+
+.panel-desc-view:hover {
+  background: var(--bg-raised);
+}
+
+.panel-desc-view.is-empty {
+  color: var(--fg-muted);
+  font-style: italic;
+}

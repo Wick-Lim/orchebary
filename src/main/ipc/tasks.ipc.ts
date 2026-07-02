@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
+import { getOrchestrator } from '../agents/orchestratorHandle'
 import { getDb } from '../db/database'
 import { ProjectStore } from '../db/ProjectStore'
 import { TaskStore } from '../db/TaskStore'
@@ -70,6 +71,8 @@ export function registerTasksIpc(): void {
     tasks.listForProject(projectId)
   )
 
+  handle('tasks:listInProgress', null, () => tasks.listInProgress())
+
   handle(
     'tasks:create',
     z.object({
@@ -131,6 +134,16 @@ export function registerTasksIpc(): void {
         rev: res.task.rev
       })
       broadcast('app:event', { type: 'task.updated', task: res.task })
+
+      // Dragging a card into In Progress starts the agent: interactive
+      // plan-mode claude in a fresh terminal bound to the task's worktree.
+      const hadActiveRun =
+        current.latestRun?.status === 'queued' || current.latestRun?.status === 'running'
+      if (status === 'inprogress' && current.status !== 'inprogress' && !hadActiveRun) {
+        getOrchestrator()
+          ?.start(id)
+          .catch((err) => console.error('[tasks] auto-start on move failed:', err))
+      }
       return { ok: true as const, rev: res.task.rev }
     }
   )
