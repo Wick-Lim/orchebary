@@ -18,7 +18,8 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  activeView: 'terminal',
+  // Board-first: planning is the entry point; terminals appear when work starts.
+  activeView: 'board',
   setActiveView: (v) => set({ activeView: v }),
 
   pendingOpenSession: null,

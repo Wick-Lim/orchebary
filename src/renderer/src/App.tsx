@@ -16,17 +16,17 @@ function ViewSwitch({ active }: { active: AppView }): React.JSX.Element {
     <div className="view-switch">
       <button
         type="button"
-        className={active === 'terminal' ? 'is-on' : ''}
-        onClick={() => setActiveView('terminal')}
-      >
-        Terminal
-      </button>
-      <button
-        type="button"
         className={active === 'board' ? 'is-on' : ''}
         onClick={() => setActiveView('board')}
       >
         Board
+      </button>
+      <button
+        type="button"
+        className={active === 'terminal' ? 'is-on' : ''}
+        onClick={() => setActiveView('terminal')}
+      >
+        Terminal
       </button>
     </div>
   )
