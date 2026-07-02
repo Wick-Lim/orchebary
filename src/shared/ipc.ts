@@ -14,7 +14,8 @@ import type {
   Task,
   TaskRun,
   TaskStatus,
-  TerminalSessionInfo
+  TerminalSessionInfo,
+  WorktreeEntry
 } from './domain'
 
 /** Request/response channels (ipcRenderer.invoke / ipcMain.handle). */
@@ -73,6 +74,10 @@ export interface Invokables {
 
   'worktree:openInTerminal': { req: { runId: string; cols: number; rows: number }; res: TerminalSessionInfo }
   'worktree:remove': { req: { runId: string; deleteBranch: boolean }; res: void }
+  /** Every managed worktree across projects (+ ghost directories on disk). */
+  'worktree:listAll': { req: void; res: WorktreeEntry[] }
+  /** Delete a ghost worktree directory and prune its project's registry. */
+  'worktree:pruneGhost': { req: { path: string }; res: void }
 
   'agents:listAvailable': { req: void; res: AgentAvailability[] }
 

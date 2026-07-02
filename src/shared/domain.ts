@@ -127,6 +127,23 @@ export interface AgentAvailability {
   problem?: string
 }
 
+/** One managed git worktree, as shown in the Worktrees view. */
+export interface WorktreeEntry {
+  worktreePath: string
+  /** Ghost: a directory on disk with no known run behind it. */
+  orphan: boolean
+  branch?: string
+  projectId?: string
+  projectName?: string
+  taskId?: string
+  taskTitle?: string
+  taskStatus?: TaskStatus
+  latestRunId?: string
+  latestRunStatus?: RunStatus
+  /** Uncommitted changes present in the worktree. */
+  dirty?: boolean
+}
+
 // ---------------------------------------------------------------------------
 // Terminal
 

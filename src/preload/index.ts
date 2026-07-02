@@ -95,7 +95,9 @@ const api = {
     openInTerminal: (runId: string, cols: number, rows: number) =>
       invoke('worktree:openInTerminal', { runId, cols, rows }),
     remove: (runId: string, deleteBranch: boolean) =>
-      invoke('worktree:remove', { runId, deleteBranch })
+      invoke('worktree:remove', { runId, deleteBranch }),
+    listAll: () => invoke('worktree:listAll', undefined),
+    pruneGhost: (path: string) => invoke('worktree:pruneGhost', { path })
   },
 
   agents: {

@@ -1,10 +1,10 @@
 import { app } from 'electron'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { z } from 'zod'
-import type { Project, Task, TaskRun } from '../../shared/domain'
+import type { Project, Task, TaskRun, WorktreeEntry } from '../../shared/domain'
 import { GitService } from '../agents/GitService'
 import { getAdapter, listAvailability } from '../agents/registry'
 import { setOrchestrator } from '../agents/orchestratorHandle'
@@ -27,7 +27,8 @@ export function registerAgentIpc(): void {
   const tasks = new TaskStore(db)
   const runs = new RunStore(db)
   const git = new GitService()
-  const worktrees = new WorktreeManager(path.join(os.homedir(), '.orchebary', 'worktrees'), git)
+  const worktreeRoot = path.join(os.homedir(), '.orchebary', 'worktrees')
+  const worktrees = new WorktreeManager(worktreeRoot, git)
   const orchestrator = new RunOrchestrator({
     projects,
     tasks,
@@ -167,6 +168,74 @@ export function registerAgentIpc(): void {
       await worktrees.remove(project, run, { force: true, deleteBranch })
     }
   )
+
+  handle('worktree:listAll', null, async () => {
+    const entries: WorktreeEntry[] = []
+    const known = new Set<string>()
+
+    for (const run of runs.listLatestPerWorktree()) {
+      known.add(run.worktreePath)
+      if (!existsSync(run.worktreePath)) continue
+      const task = tasks.get(run.taskId)
+      const project = task ? projects.get(task.projectId) : undefined
+      let dirty = false
+      try {
+        dirty = (await git.statusPorcelain(run.worktreePath)) !== ''
+      } catch {
+        // unreadable worktree — surface it anyway
+      }
+      entries.push({
+        worktreePath: run.worktreePath,
+        orphan: false,
+        branch: run.branch,
+        projectId: project?.id,
+        projectName: project?.name,
+        taskId: task?.id,
+        taskTitle: task?.title,
+        taskStatus: task?.status,
+        latestRunId: run.id,
+        latestRunStatus: run.status,
+        dirty
+      })
+    }
+
+    // Ghost directories on disk that no run knows about.
+    try {
+      for (const projDir of await readdir(worktreeRoot, { withFileTypes: true })) {
+        if (!projDir.isDirectory()) continue
+        const projPath = path.join(worktreeRoot, projDir.name)
+        for (const wt of await readdir(projPath, { withFileTypes: true })) {
+          if (!wt.isDirectory()) continue
+          const p = path.join(projPath, wt.name)
+          if (!known.has(p)) {
+            entries.push({
+              worktreePath: p,
+              orphan: true,
+              projectId: projDir.name,
+              projectName: projects.get(projDir.name)?.name
+            })
+          }
+        }
+      }
+    } catch {
+      // no worktree root yet
+    }
+    return entries
+  })
+
+  handle('worktree:pruneGhost', z.object({ path: z.string() }), async ({ path: target }) => {
+    const resolved = path.resolve(target)
+    if (!resolved.startsWith(worktreeRoot + path.sep)) {
+      throw new Error('path is outside the managed worktree root')
+    }
+    const owner = runs.listLatestPerWorktree().find((r) => r.worktreePath === resolved)
+    if (owner && (owner.status === 'running' || owner.status === 'queued')) {
+      throw new Error('worktree has an active run')
+    }
+    await rm(resolved, { recursive: true, force: true })
+    const project = projects.get(path.basename(path.dirname(resolved)))
+    if (project) await git.worktreePrune(project.repoPath)
+  })
 
   // --- agents ---------------------------------------------------------------
 

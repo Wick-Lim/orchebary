@@ -2,8 +2,8 @@
 
 Warp급 터미널과 Vibe-Kanban식 AI 에이전트 오케스트레이션을 결합한 데스크톱 개발도구.
 
-- **터미널**: xterm.js(WebGL) + node-pty. OSC 133 셸 통합 기반 **커맨드 블록**(exit 배지·duration·copy·re-run·스티키 헤더), 탭·분할 패널, ⌘K 커맨드 팔레트, ⌃R 히스토리 검색(SQLite 영속), Fig식 자동완성·AI 명령 생성용 seam 포함.
-- **칸반 보드**: 카드 = 코딩 태스크. **Start Agent**로 Claude Code(`claude -p --output-format stream-json`)를 태스크 전용 **git worktree**(`~/.orchebary/worktrees`, 브랜치 `orc/*`)에서 실행. 카드가 To Do → In Progress → In Review → Done으로 라이브 이동, 구조화 런 로그·diff 뷰·후속 프롬프트(`--resume`)·squash 머지·Open-in-terminal 제공. Jira 연동은 Phase 2(스키마는 준비됨).
+- **터미널**: xterm.js(WebGL) + node-pty. OSC 133 셸 통합 기반 **커맨드 블록**(exit 배지·duration·copy·re-run·스티키 헤더), 분할 패널, ⌘K 커맨드 팔레트, ⌃R 히스토리 검색(SQLite 영속). 좌측 레일 = **Working-on 이슈 리스트**(이슈:터미널 1:1), 스크래치 셸은 ⌘T.
+- **칸반 보드(기본 뷰)**: 카드 = 코딩 태스크. **카드를 In Progress로 드래그하면** 태스크 전용 **git worktree**(`~/.orchebary/worktrees`, 브랜치 `orc/*`)에 진짜 zsh 터미널이 열리고 `claude --permission-mode plan '<제목+내용>'`이 자동 실행됩니다. claude를 종료하면(셸은 살아있음) 자동 커밋 → diff 집계 → 카드가 In Review로. 상세 패널에서 diff 뷰·후속 프롬프트(`--continue`)·squash 머지·Open terminal. **Worktrees 탭**에서 워크트리 정리(dirty 표시·제거·유령 prune). Jira 연동은 Phase 2(스키마는 준비됨).
 
 ## 개발
 

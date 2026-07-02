@@ -4,6 +4,7 @@ import { BoardPage } from './kanban/BoardPage'
 import { installKeybindings } from './layout/KeybindingService'
 import { PaneLayout } from './layout/PaneLayout'
 import { WorkspaceRail } from './layout/WorkspaceRail'
+import { WorktreesPage } from './worktrees/WorktreesPage'
 import { registerBuiltinActions } from './palette/actions'
 import { PaletteHost } from './palette/PaletteHost'
 import { initWorkspace, useLayoutStore } from './state/layoutStore'
@@ -27,6 +28,13 @@ function ViewSwitch({ active }: { active: AppView }): React.JSX.Element {
         onClick={() => setActiveView('terminal')}
       >
         Terminal
+      </button>
+      <button
+        type="button"
+        className={active === 'worktrees' ? 'is-on' : ''}
+        onClick={() => setActiveView('worktrees')}
+      >
+        Worktrees
       </button>
     </div>
   )
@@ -75,6 +83,11 @@ export default function App(): React.JSX.Element {
       {activeView === 'board' && (
         <div className="workspace">
           <BoardPage />
+        </div>
+      )}
+      {activeView === 'worktrees' && (
+        <div className="workspace">
+          <WorktreesPage />
         </div>
       )}
       <PaletteHost />

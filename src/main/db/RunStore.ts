@@ -143,6 +143,18 @@ export class RunStore {
       .map(toRun)
   }
 
+  /** Latest run per distinct worktree — the Worktrees view's backbone. */
+  listLatestPerWorktree(): TaskRun[] {
+    return this.db
+      .prepare<[], RunRow>(
+        `SELECT r.* FROM task_runs r
+         JOIN (SELECT worktree_path, MAX(created_at) AS mc FROM task_runs GROUP BY worktree_path) g
+           ON g.worktree_path = r.worktree_path AND g.mc = r.created_at`
+      )
+      .all()
+      .map(toRun)
+  }
+
   /** Latest run per task, used to find the reviewable worktree. */
   latestForTask(taskId: string): TaskRun | undefined {
     const row = this.db
