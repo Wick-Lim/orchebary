@@ -19,8 +19,6 @@ interface SpawnAgentOptions {
   cwd: string
   cols: number
   rows: number
-  command: string
-  args: string[]
   env?: Record<string, string>
   runId: string
   taskId: string
@@ -45,6 +43,28 @@ export class SessionManager {
     req: CreateTerminalRequest,
     meta?: { runId?: string; taskId?: string; title?: string }
   ): Promise<TerminalSessionInfo> {
+    return this.spawnShellSession('shell', req, meta)
+  }
+
+  /**
+   * A task's terminal: a real login shell in the worktree (so shell
+   * integration, blocks, and post-agent work all behave like any terminal).
+   * The agent command is typed into it by the run orchestrator; the terminal
+   * outlives the agent process.
+   */
+  async createAgentTerminal(opts: SpawnAgentOptions): Promise<TerminalSessionInfo> {
+    return this.spawnShellSession(
+      'agent',
+      { cwd: opts.cwd, cols: opts.cols, rows: opts.rows, env: opts.env },
+      { runId: opts.runId, taskId: opts.taskId, title: opts.title }
+    )
+  }
+
+  private async spawnShellSession(
+    kind: TerminalKind,
+    req: CreateTerminalRequest,
+    meta?: { runId?: string; taskId?: string; title?: string }
+  ): Promise<TerminalSessionInfo> {
     const sessionId = nanoid()
     const baseEnv = await captureLoginShellEnv()
     const shell = defaultShell()
@@ -65,7 +85,7 @@ export class SessionManager {
 
     return this.register(
       sessionId,
-      'shell',
+      kind,
       {
         file: shell,
         args: ['-il'],
@@ -76,27 +96,6 @@ export class SessionManager {
         title: meta?.title ?? path.basename(cwd)
       },
       meta?.runId || meta?.taskId ? { runId: meta.runId, taskId: meta.taskId } : undefined
-    )
-  }
-
-  /** Spawn an arbitrary command (e.g. `claude --resume`) under a PTY. */
-  async createAgentTerminal(opts: SpawnAgentOptions): Promise<TerminalSessionInfo> {
-    const sessionId = nanoid()
-    const baseEnv = await captureLoginShellEnv()
-    const env = { ...baseEnv, ...opts.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
-    return this.register(
-      sessionId,
-      'agent',
-      {
-        file: opts.command,
-        args: opts.args,
-        cwd: opts.cwd,
-        cols: opts.cols,
-        rows: opts.rows,
-        env,
-        title: opts.title
-      },
-      { runId: opts.runId, taskId: opts.taskId }
     )
   }
 

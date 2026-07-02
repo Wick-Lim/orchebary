@@ -18,6 +18,11 @@ const BASE_ARGS = [
 
 type Json = Record<string, unknown>
 
+/** POSIX single-quote escaping: ' -> '\'' */
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
 function asRecord(v: unknown): Json | null {
   return v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : null
 }
@@ -179,23 +184,17 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     }
   }
 
-  buildInteractiveSpawn(opts: { prompt: string; worktreePath: string }): AgentSpawnSpec {
+  buildInteractiveCommand(opts: { prompt: string }): string {
     // Interactive REPL, starting in plan mode with the task as the first prompt.
-    return {
-      command: 'claude',
-      args: ['--permission-mode', 'plan', opts.prompt],
-      cwd: opts.worktreePath
-    }
+    return `claude --permission-mode plan ${shellQuote(opts.prompt)}`
   }
 
-  buildInteractiveFollowUpSpawn(opts: { prompt: string; worktreePath: string }): AgentSpawnSpec {
+  buildInteractiveFollowUpCommand(opts: { prompt: string }): string {
     // --continue picks up the most recent conversation in this cwd (the
     // worktree is per-task, so this is deterministic without a session id).
-    return {
-      command: 'claude',
-      args: ['--continue', '--permission-mode', 'plan', opts.prompt],
-      cwd: opts.worktreePath
-    }
+    // Without a prompt it just reopens the REPL — nothing is auto-submitted.
+    const base = 'claude --continue --permission-mode plan'
+    return opts.prompt.trim() ? `${base} ${shellQuote(opts.prompt)}` : base
   }
 
   createParser(): AgentOutputParser {

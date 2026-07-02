@@ -128,14 +128,13 @@ class TerminalRegistry {
     term.open(container)
 
     const bundle: TerminalBundle = { info, term, fit, search, container, attached: false }
-    if (info.kind === 'shell') {
-      // Command-block pipeline: OSC events -> BlockManager -> per-session
-      // vanilla store. Agent sessions stay chrome-free plain terminals.
-      const integration = new ShellIntegrationAddon()
-      term.loadAddon(integration)
-      bundle.integration = integration
-      bundle.blocks = new BlockManager(info.sessionId, term, integration)
-    }
+    // Command-block pipeline: OSC events -> BlockManager -> per-session
+    // vanilla store. Task terminals are real shells too now, so every session
+    // gets the pipeline — it self-activates on the first OSC 133;A.
+    const integration = new ShellIntegrationAddon()
+    term.loadAddon(integration)
+    bundle.integration = integration
+    bundle.blocks = new BlockManager(info.sessionId, term, integration)
     this.bundles.set(info.sessionId, bundle)
     return bundle
   }

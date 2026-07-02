@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Task, TerminalSessionInfo } from '../../../shared/domain'
 import { useLayoutStore } from '../state/layoutStore'
 import { leavesOf } from './tree'
@@ -8,30 +8,21 @@ type RailTask = Task & { projectName: string }
 function statusDotClass(t: RailTask): string {
   const s = t.latestRun?.status
   if (s === 'running' || s === 'queued') return 'is-running'
-  if (s === 'failed') return 'is-failed'
   return 'is-idle'
 }
 
-/**
- * One live session row: nested under its issue (fixed label) or a scratch
- * shell at the rail bottom. Only shells get the hover ×; killing the PTY
- * prunes panes/tabs through the terminal.closed event.
- */
-function SessionRow({
+/** Scratch shell row (⌘T terminals bound to no task), sunk to the bottom. */
+function ScratchRow({
   session,
-  label,
-  active,
-  nested
+  active
 }: {
   session: TerminalSessionInfo
-  label: string
   active: boolean
-  nested?: boolean
 }): React.JSX.Element {
   const reveal = (): void => useLayoutStore.getState().revealSession(session)
   return (
     <div
-      className={`task-rail-item ${nested ? 'rail-session' : 'rail-shell'}${active ? ' is-active' : ''}`}
+      className={`task-rail-item rail-shell${active ? ' is-active' : ''}`}
       role="button"
       tabIndex={0}
       onClick={reveal}
@@ -39,30 +30,28 @@ function SessionRow({
         if (e.key === 'Enter') reveal()
       }}
     >
-      <span className="rail-shell-glyph">{session.kind === 'agent' ? '⏵' : '❯'}</span>
-      <span className="task-rail-title">{label}</span>
-      {session.kind === 'shell' && (
-        <button
-          type="button"
-          className="task-rail-close"
-          title="Close terminal"
-          onClick={(e) => {
-            e.stopPropagation()
-            void window.orchebary.terminal.kill(session.sessionId)
-          }}
-        >
-          ×
-        </button>
-      )}
+      <span className="rail-shell-glyph">❯</span>
+      <span className="task-rail-title">{session.title || 'shell'}</span>
+      <button
+        type="button"
+        className="task-rail-close"
+        title="Close terminal"
+        onClick={(e) => {
+          e.stopPropagation()
+          void window.orchebary.terminal.kill(session.sessionId)
+        }}
+      >
+        ×
+      </button>
     </div>
   )
 }
 
 /**
- * Primary navigation of the terminal workspace (there is no top tab strip):
- * a "Working on" issue tree — every task that is in progress or still owns
- * live sessions, with those sessions nested beneath — then scratch shells
- * (⌘T terminals bound to no task) sunk to the rail bottom.
+ * Primary navigation of the terminal workspace: the issues being worked on.
+ * Each issue owns exactly ONE terminal (a shell in its worktree where the
+ * agent runs as a command) — clicking the issue focuses it, recreating the
+ * shell if it is gone. Scratch shells sink to the rail bottom.
  */
 export function WorkspaceRail(): React.JSX.Element {
   const [items, setItems] = useState<RailTask[]>([])
@@ -103,12 +92,25 @@ export function WorkspaceRail(): React.JSX.Element {
   }, [tabs, activeTabId])
 
   const allSessions = Object.values(sessions)
-  // Agent session first (it is the issue's primary session), then its shells.
-  const sessionsForTask = (taskId: string): TerminalSessionInfo[] => {
-    const bound = allSessions.filter((s) => s.taskId === taskId)
-    return [...bound.filter((s) => s.kind === 'agent'), ...bound.filter((s) => s.kind === 'shell')]
-  }
+  const sessionForTask = (taskId: string): TerminalSessionInfo | undefined =>
+    allSessions.find((s) => s.taskId === taskId && s.kind === 'agent') ??
+    allSessions.find((s) => s.taskId === taskId)
   const scratchShells = allSessions.filter((s) => s.kind === 'shell' && !s.taskId)
+
+  const openIssueTerminal = (t: RailTask): void => {
+    const session = sessionForTask(t.id)
+    if (session) {
+      useLayoutStore.getState().revealSession(session)
+      return
+    }
+    // Terminal gone (e.g. after an app restart) — recreate it in the worktree.
+    if (t.latestRun) {
+      void window.orchebary.worktree
+        .openInTerminal(t.latestRun.id, 80, 24)
+        .then((info) => useLayoutStore.getState().revealSession(info))
+        .catch(() => undefined)
+    }
+  }
 
   return (
     <div className="task-rail">
@@ -121,43 +123,46 @@ export function WorkspaceRail(): React.JSX.Element {
         </div>
       )}
       {items.map((t) => {
-        const bound = sessionsForTask(t.id)
-        const primary = bound[0]
-        const active = primary ? activeSessionIds.has(primary.sessionId) : false
+        const session = sessionForTask(t.id)
+        const active = session ? activeSessionIds.has(session.sessionId) : false
         return (
-          <Fragment key={t.id}>
-            <button
-              type="button"
-              className={`task-rail-item${active ? ' is-active' : ''}${primary ? '' : ' no-session'}`}
-              title={primary ? t.title : `${t.title} — no live terminal`}
-              onClick={() => {
-                if (primary) useLayoutStore.getState().revealSession(primary)
-              }}
-            >
-              <span className={`task-rail-dot ${statusDotClass(t)}`} />
-              <span className="task-rail-title">{t.title}</span>
-              <span className="task-rail-project">{t.projectName}</span>
-            </button>
-            {bound.map((s) => (
-              <SessionRow
-                key={s.sessionId}
-                session={s}
-                label={s.kind === 'agent' ? 'claude' : 'worktree shell'}
-                active={activeSessionIds.has(s.sessionId)}
-                nested
-              />
-            ))}
-          </Fragment>
+          <div
+            key={t.id}
+            className={`task-rail-item${active ? ' is-active' : ''}${session || t.latestRun ? '' : ' no-session'}`}
+            role="button"
+            tabIndex={0}
+            title={t.title}
+            onClick={() => openIssueTerminal(t)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') openIssueTerminal(t)
+            }}
+          >
+            <span className={`task-rail-dot ${statusDotClass(t)}`} />
+            <span className="task-rail-title">{t.title}</span>
+            <span className="task-rail-project">{t.projectName}</span>
+            {session && (
+              <button
+                type="button"
+                className="task-rail-close"
+                title="Close terminal"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void window.orchebary.terminal.kill(session.sessionId)
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
         )
       })}
 
       {scratchShells.length > 0 && (
         <div className="rail-scratch">
           {scratchShells.map((s) => (
-            <SessionRow
+            <ScratchRow
               key={s.sessionId}
               session={s}
-              label={s.title || 'shell'}
               active={activeSessionIds.has(s.sessionId)}
             />
           ))}

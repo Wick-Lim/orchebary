@@ -138,13 +138,20 @@ export function registerAgentIpc(): void {
       cols: z.number().int().min(1).max(1000),
       rows: z.number().int().min(1).max(1000)
     }),
-    ({ runId, cols, rows }) => {
+    async ({ runId, cols, rows }) => {
       const { run, task } = requireContext(runId)
+      // 1:1 — a task owns one terminal; reuse the live one when it exists.
+      const live = sessionManager.list().find((s) => s.taskId === run.taskId)
+      if (live) return live
       if (!existsSync(run.worktreePath)) throw new Error('worktree no longer exists')
-      return sessionManager.createShell(
-        { cwd: run.worktreePath, cols, rows },
-        { runId, taskId: run.taskId, title: task.title }
-      )
+      return sessionManager.createAgentTerminal({
+        cwd: run.worktreePath,
+        cols,
+        rows,
+        runId,
+        taskId: run.taskId,
+        title: task.title
+      })
     }
   )
 

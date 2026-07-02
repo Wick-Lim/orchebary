@@ -111,13 +111,23 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
   const selectedRun = runs.find((r) => r.id === selectedRunId)
 
   function jumpToTerminal(): void {
-    void act('Go to terminal failed', async () => {
+    void act('Open terminal failed', async () => {
+      // 1:1 — jump to the task's terminal, recreating it in the worktree if
+      // it is gone (e.g. after an app restart).
       const list = await window.orchebary.terminal.list()
-      const s =
+      const live =
         list.find((x) => x.kind === 'agent' && x.taskId === task.id) ??
         list.find((x) => x.taskId === task.id)
-      if (s) useUiStore.getState().requestOpenSession(s)
-      else showToast('터미널 세션을 찾을 수 없습니다')
+      if (live) {
+        useUiStore.getState().requestOpenSession(live)
+        return
+      }
+      if (!run) {
+        showToast('터미널 세션을 찾을 수 없습니다')
+        return
+      }
+      const info = await window.orchebary.worktree.openInTerminal(run.id, 80, 24)
+      useUiStore.getState().requestOpenSession(info)
     })
   }
 
@@ -195,22 +205,12 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
         </div>
 
         <div className="panel-actions">
-          {!running && (
-            <button
-              className="btn btn-primary"
-              disabled={busy}
-              onClick={() =>
-                void act('Start agent failed', async () => {
-                  await window.orchebary.runs.start({ taskId: task.id })
-                })
-              }
-            >
-              Start Agent
-            </button>
+          {!run && (
+            <span className="panel-note">Drag this card into In Progress to start the agent.</span>
           )}
-          {running && (
+          {run && (
             <button className="btn btn-primary" disabled={busy} onClick={jumpToTerminal}>
-              Go to terminal
+              Open terminal
             </button>
           )}
           {running && run && (
@@ -239,20 +239,6 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
               }
             >
               Merge to main
-            </button>
-          )}
-          {run && !running && (
-            <button
-              className="btn"
-              disabled={busy}
-              onClick={() =>
-                void act('Open in terminal failed', async () => {
-                  const info = await window.orchebary.worktree.openInTerminal(run.id, 80, 24)
-                  useUiStore.getState().requestOpenSession(info)
-                })
-              }
-            >
-              Open in terminal
             </button>
           )}
           {run && !running && (
