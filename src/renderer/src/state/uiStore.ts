@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { TerminalSessionInfo } from '../../../shared/domain'
 
-export type AppView = 'terminal' | 'board' | 'worktrees'
+export type AppView = 'terminal' | 'board'
 
 interface UiState {
   activeView: AppView

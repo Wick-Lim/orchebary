@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import './assets/workspace.css'
 import { BoardPage } from './kanban/BoardPage'
+import { Toasts } from './kanban/Toasts'
 import { installKeybindings } from './layout/KeybindingService'
 import { PaneLayout } from './layout/PaneLayout'
 import { WorkspaceRail } from './layout/WorkspaceRail'
-import { WorktreesPage } from './worktrees/WorktreesPage'
+import { WorktreesPanel } from './worktrees/WorktreesPage'
 import { registerBuiltinActions } from './palette/actions'
 import { PaletteHost } from './palette/PaletteHost'
 import { initWorkspace, useLayoutStore } from './state/layoutStore'
@@ -28,13 +29,6 @@ function ViewSwitch({ active }: { active: AppView }): React.JSX.Element {
         onClick={() => setActiveView('terminal')}
       >
         Terminal
-      </button>
-      <button
-        type="button"
-        className={active === 'worktrees' ? 'is-on' : ''}
-        onClick={() => setActiveView('worktrees')}
-      >
-        Worktrees
       </button>
     </div>
   )
@@ -69,28 +63,29 @@ export default function App(): React.JSX.Element {
       <div className="titlebar-drag">
         <ViewSwitch active={activeView} />
       </div>
-      {/* Terminal view stays mounted (hidden) so xterm DOM/state survives;
-          TerminalRegistry's ResizeObserver refits panes when shown again. */}
-      <div
-        className="workspace terminal-workspace"
-        style={activeView === 'terminal' ? undefined : { display: 'none' }}
-      >
-        <WorkspaceRail />
-        <div className="terminal-main">
-          <PaneLayout />
+      <div className="app-content">
+        <div className="app-main">
+          {/* Terminal view stays mounted (hidden) so xterm DOM/state survives;
+              TerminalRegistry's ResizeObserver refits panes when shown again. */}
+          <div
+            className="workspace terminal-workspace"
+            style={activeView === 'terminal' ? undefined : { display: 'none' }}
+          >
+            <WorkspaceRail />
+            <div className="terminal-main">
+              <PaneLayout />
+            </div>
+          </div>
+          {activeView === 'board' && (
+            <div className="workspace">
+              <BoardPage />
+            </div>
+          )}
         </div>
+        <WorktreesPanel />
       </div>
-      {activeView === 'board' && (
-        <div className="workspace">
-          <BoardPage />
-        </div>
-      )}
-      {activeView === 'worktrees' && (
-        <div className="workspace">
-          <WorktreesPage />
-        </div>
-      )}
       <PaletteHost />
+      <Toasts />
     </div>
   )
 }

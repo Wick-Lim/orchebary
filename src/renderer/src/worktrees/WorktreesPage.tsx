@@ -1,37 +1,42 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WorktreeEntry } from '../../../shared/domain'
 import { TASK_STATUS_LABEL } from '../../../shared/domain'
 import '../assets/worktrees.css'
 import { showError, showToast } from '../kanban/toastStore'
-import { Toasts } from '../kanban/Toasts'
 import { useUiStore } from '../state/uiStore'
 
-function shortPath(p: string): string {
-  const parts = p.split('/')
-  return parts.slice(-2).join('/')
+function dirName(p: string): string {
+  return p.split('/').pop() ?? p
 }
 
 /**
- * Management view for every git worktree the app owns: what task/branch it
- * belongs to, whether it still has uncommitted changes, plus cleanup for
- * ghost directories left behind by crashes.
+ * Always-visible right sidebar: every git worktree the app owns — branch,
+ * owning task, dirty state — with open/remove/prune right where you look.
  */
-export function WorktreesPage(): React.JSX.Element {
-  const [entries, setEntries] = useState<WorktreeEntry[] | null>(null)
+export function WorktreesPanel(): React.JSX.Element {
+  const [entries, setEntries] = useState<WorktreeEntry[]>([])
   const [busyPath, setBusyPath] = useState<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refresh = useCallback(() => {
     window.orchebary.worktree
       .listAll()
       .then(setEntries)
-      .catch((err) => {
-        setEntries([])
-        showError(err, 'Load worktrees failed')
-      })
+      .catch(() => undefined)
   }, [])
 
   useEffect(() => {
     refresh()
+    const unsubscribe = window.orchebary.onAppEvent((e) => {
+      if (e.type === 'run.status' || e.type === 'task.updated' || e.type === 'task.deleted') {
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = setTimeout(refresh, 300)
+      }
+    })
+    return () => {
+      unsubscribe()
+      if (timer.current) clearTimeout(timer.current)
+    }
   }, [refresh])
 
   async function act(path: string, label: string, fn: () => Promise<void>): Promise<void> {
@@ -47,7 +52,7 @@ export function WorktreesPage(): React.JSX.Element {
   }
 
   const groups = new Map<string, WorktreeEntry[]>()
-  for (const e of entries ?? []) {
+  for (const e of entries) {
     const key = e.projectName ?? e.projectId ?? 'unknown project'
     const list = groups.get(key)
     if (list) list.push(e)
@@ -55,20 +60,16 @@ export function WorktreesPage(): React.JSX.Element {
   }
 
   return (
-    <div className="wt-root">
-      <div className="wt-header">
-        <span className="wt-title">Worktrees</span>
-        <span className="wt-hint">
-          One isolated checkout per task under ~/.orchebary/worktrees — merged or discarded work can
-          be cleaned up here.
-        </span>
-        <button className="btn" onClick={refresh}>
-          Refresh
+    <div className="wt-panel">
+      <div className="wt-panel-header">
+        Worktrees <span className="task-rail-count">{entries.length}</span>
+        <button className="wt-refresh" title="Refresh" onClick={refresh}>
+          ↻
         </button>
       </div>
 
-      {entries !== null && entries.length === 0 && (
-        <div className="wt-empty">No worktrees yet — they appear when agents start working.</div>
+      {entries.length === 0 && (
+        <div className="rail-empty">Agents work in isolated worktrees — they appear here.</div>
       )}
 
       {[...groups.entries()].map(([projectName, list]) => (
@@ -79,11 +80,22 @@ export function WorktreesPage(): React.JSX.Element {
             const busy = busyPath === e.worktreePath
             return (
               <div key={e.worktreePath} className={`wt-row${e.orphan ? ' wt-orphan' : ''}`}>
-                <div className="wt-row-main">
+                <div className="wt-row-top">
                   <span className="wt-path mono" title={e.worktreePath}>
-                    {shortPath(e.worktreePath)}
+                    {dirName(e.worktreePath)}
                   </span>
-                  {e.branch && <span className="wt-chip mono">{e.branch}</span>}
+                  {e.dirty && (
+                    <span className="wt-dot" title="Uncommitted changes">
+                      ●
+                    </span>
+                  )}
+                </div>
+                {e.branch && (
+                  <div className="wt-branch mono" title={e.branch}>
+                    ⎇ {e.branch}
+                  </div>
+                )}
+                <div className="wt-meta">
                   {e.taskTitle && (
                     <span className="wt-task" title={e.taskTitle}>
                       {e.taskTitle}
@@ -94,14 +106,13 @@ export function WorktreesPage(): React.JSX.Element {
                       {TASK_STATUS_LABEL[e.taskStatus]}
                     </span>
                   )}
-                  {e.dirty && <span className="wt-chip wt-dirty">uncommitted changes</span>}
-                  {e.orphan && <span className="wt-chip wt-dirty">ghost — no task knows this</span>}
-                  {running && <span className="wt-chip wt-running">agent running</span>}
+                  {running && <span className="wt-chip wt-running">running</span>}
+                  {e.orphan && <span className="wt-chip wt-dirty">ghost</span>}
                 </div>
                 <div className="wt-row-actions">
                   {!e.orphan && e.latestRunId && (
                     <button
-                      className="btn"
+                      className="wt-action"
                       disabled={busy}
                       onClick={() =>
                         void act(e.worktreePath, 'Open terminal failed', async () => {
@@ -114,12 +125,12 @@ export function WorktreesPage(): React.JSX.Element {
                         })
                       }
                     >
-                      Open terminal
+                      ↗ terminal
                     </button>
                   )}
                   {!e.orphan && e.latestRunId && !running && (
                     <button
-                      className="btn btn-danger"
+                      className="wt-action wt-action-danger"
                       disabled={busy}
                       onClick={() => {
                         if (
@@ -134,12 +145,12 @@ export function WorktreesPage(): React.JSX.Element {
                         })
                       }}
                     >
-                      Remove
+                      remove
                     </button>
                   )}
                   {e.orphan && (
                     <button
-                      className="btn btn-danger"
+                      className="wt-action wt-action-danger"
                       disabled={busy}
                       onClick={() => {
                         if (!window.confirm(`Delete this ghost directory?\n${e.worktreePath}`))
@@ -150,7 +161,7 @@ export function WorktreesPage(): React.JSX.Element {
                         })
                       }}
                     >
-                      Prune
+                      prune
                     </button>
                   )}
                 </div>
@@ -159,7 +170,6 @@ export function WorktreesPage(): React.JSX.Element {
           })}
         </div>
       ))}
-      <Toasts />
     </div>
   )
 }

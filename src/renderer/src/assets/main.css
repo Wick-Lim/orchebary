@@ -112,3 +112,17 @@ body {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Content row: active view on the left, persistent worktrees panel on the right. */
+.app-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}

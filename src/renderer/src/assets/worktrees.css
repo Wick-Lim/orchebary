@@ -1,39 +1,51 @@
-.wt-root {
-  flex: 1;
-  min-height: 0;
+/* Always-visible right sidebar: worktree management */
+.wt-panel {
+  flex: 0 0 264px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 14px 18px;
+  gap: 2px;
+  padding: 8px 8px 12px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-raised);
   overflow-y: auto;
 }
 
-.wt-header {
+.wt-panel-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.wt-title {
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.wt-hint {
-  flex: 1;
+  gap: 6px;
+  padding: 4px 6px 8px;
   font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--fg-muted);
 }
 
-.wt-empty {
-  padding: 48px 0;
-  text-align: center;
+.wt-refresh {
+  margin-left: auto;
+  border: none;
+  background: transparent;
   color: var(--fg-muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.wt-refresh:hover {
+  background: var(--bg-overlay);
+  color: var(--fg);
+}
+
+.wt-group {
+  margin-top: 6px;
 }
 
 .wt-group-title {
-  margin-bottom: 6px;
-  font-size: 11px;
+  padding: 0 6px 4px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -42,42 +54,84 @@
 
 .wt-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
   margin-bottom: 6px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg-raised);
+  background: var(--bg);
 }
 
 .wt-row.wt-orphan {
-  opacity: 0.75;
+  opacity: 0.7;
   border-style: dashed;
 }
 
-.wt-row-main {
-  flex: 1;
-  min-width: 0;
+.wt-row-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
 }
 
 .wt-path {
-  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--fg);
 }
 
 .mono {
   font-family: var(--font-mono);
 }
 
-.wt-chip {
-  padding: 1px 8px;
-  border-radius: 10px;
-  background: var(--bg-overlay);
+.wt-dot {
+  flex: 0 0 auto;
+  font-size: 9px;
+  color: var(--warning);
+}
+
+.wt-branch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10px;
+  color: var(--fg-muted);
+}
+
+.wt-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wt-task {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.wt-meta .panel-status-chip {
+  flex: 0 0 auto;
+  font-size: 9px;
+  padding: 1px 6px;
+}
+
+.wt-chip {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+  font-size: 9px;
   color: var(--fg-muted);
   white-space: nowrap;
 }
@@ -92,17 +146,28 @@
   color: var(--accent);
 }
 
-.wt-task {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--fg-muted);
-}
-
 .wt-row-actions {
-  flex: 0 0 auto;
   display: flex;
   gap: 6px;
+}
+
+.wt-action {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.wt-action:hover {
+  color: var(--fg);
+  background: var(--bg-overlay);
+}
+
+.wt-action-danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
 }

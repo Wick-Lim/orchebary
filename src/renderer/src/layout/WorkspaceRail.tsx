@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Task, TerminalSessionInfo } from '../../../shared/domain'
+import { TASK_STATUS_LABEL } from '../../../shared/domain'
 import { useLayoutStore } from '../state/layoutStore'
 import { leavesOf } from './tree'
 
 type RailTask = Task & { projectName: string }
-
-function statusDotClass(t: RailTask): string {
-  const s = t.latestRun?.status
-  if (s === 'running' || s === 'queued') return 'is-running'
-  return 'is-idle'
-}
 
 /** Scratch shell row (⌘T terminals bound to no task), sunk to the bottom. */
 function ScratchRow({
@@ -125,10 +120,11 @@ export function WorkspaceRail(): React.JSX.Element {
       {items.map((t) => {
         const session = sessionForTask(t.id)
         const active = session ? activeSessionIds.has(session.sessionId) : false
+        const running = t.latestRun?.status === 'running' || t.latestRun?.status === 'queued'
         return (
           <div
             key={t.id}
-            className={`task-rail-item${active ? ' is-active' : ''}${session || t.latestRun ? '' : ' no-session'}`}
+            className={`rail-issue${active ? ' is-active' : ''}${session || t.latestRun ? '' : ' no-session'}`}
             role="button"
             tabIndex={0}
             title={t.title}
@@ -137,22 +133,16 @@ export function WorkspaceRail(): React.JSX.Element {
               if (e.key === 'Enter') openIssueTerminal(t)
             }}
           >
-            <span className={`task-rail-dot ${statusDotClass(t)}`} />
-            <span className="task-rail-title">{t.title}</span>
-            <span className="task-rail-project">{t.projectName}</span>
-            {session && (
-              <button
-                type="button"
-                className="task-rail-close"
-                title="Close terminal"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void window.orchebary.terminal.kill(session.sessionId)
-                }}
-              >
-                ×
-              </button>
-            )}
+            <div className="rail-issue-title">
+              {running && <span className="task-rail-dot is-running" />}
+              {t.title}
+            </div>
+            <div className="rail-issue-sub">
+              <span className={`panel-status-chip status-${t.status}`}>
+                {TASK_STATUS_LABEL[t.status]}
+              </span>
+              <span className="rail-issue-project">{t.projectName}</span>
+            </div>
           </div>
         )
       })}

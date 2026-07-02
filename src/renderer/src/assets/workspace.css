@@ -55,7 +55,7 @@
 
 /* "Working on" issue rail (left of the terminal) */
 .task-rail {
-  flex: 0 0 232px;
+  flex: 0 0 256px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -681,4 +681,63 @@
 
 .task-rail-close:hover {
   color: var(--danger);
+}
+
+/* Jira-style issue rows in the rail (issue == its terminal, 1:1) */
+.rail-issue {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  margin: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.rail-issue:hover {
+  background: var(--bg-overlay);
+}
+
+.rail-issue.is-active {
+  background: var(--bg-overlay);
+  border-color: var(--border);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail-issue.no-session {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.rail-issue-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-issue-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rail-issue-sub .panel-status-chip {
+  font-size: 10px;
+  padding: 1px 7px;
+}
+
+.rail-issue-project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--fg-muted);
 }

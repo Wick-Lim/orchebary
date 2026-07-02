@@ -17,7 +17,6 @@ import { byPosition, matchesFilter, planDropPosition } from './ordering'
 import { AddProjectButton, ProjectSwitcher } from './ProjectSwitcher'
 import { TaskCardBody } from './TaskCard'
 import { TaskDetailPanel } from './TaskDetailPanel'
-import { Toasts } from './Toasts'
 import { showError, showToast } from './toastStore'
 
 const MAIN_STATUSES: TaskStatus[] = ['todo', 'inprogress', 'inreview', 'done']
@@ -197,7 +196,6 @@ export function BoardPage(): React.JSX.Element {
       )}
 
       {selectedTask && <TaskDetailPanel key={selectedTask.id} task={selectedTask} />}
-      <Toasts />
     </div>
   )
 }
