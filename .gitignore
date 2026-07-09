@@ -4,3 +4,6 @@ out
 .DS_Store
 .eslintcache
 *.log*
+resources/shell-integration/zsh/.zsh_history
+resources/shell-integration/zsh/.zsh_sessions/
+resources/shell-integration/zsh/.zcompdump*
