@@ -174,11 +174,7 @@ export function WorkspaceRail(): React.JSX.Element {
       {scratchShells.length > 0 && (
         <div className="rail-scratch">
           {scratchShells.map((s) => (
-            <ScratchRow
-              key={s.sessionId}
-              session={s}
-              active={activeSessionIds.has(s.sessionId)}
-            />
+            <ScratchRow key={s.sessionId} session={s} active={activeSessionIds.has(s.sessionId)} />
           ))}
         </div>
       )}

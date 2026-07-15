@@ -111,7 +111,12 @@ export class TaskStore {
     return row ? toTask(row) : undefined
   }
 
-  create(req: { projectId: string; title: string; description?: string; status?: TaskStatus }): Task & { rev: number } {
+  create(req: {
+    projectId: string
+    title: string
+    description?: string
+    status?: TaskStatus
+  }): Task & { rev: number } {
     const id = uuidv7()
     const now = nowIso()
     const status = req.status ?? 'todo'
@@ -136,11 +141,16 @@ export class TaskStore {
     return generateKeyBetween(last?.position ?? null, null)
   }
 
-  updateContent(id: string, patch: { title?: string; description?: string }): Task & { rev: number } {
+  updateContent(
+    id: string,
+    patch: { title?: string; description?: string }
+  ): Task & { rev: number } {
     const t = this.get(id)
     if (!t) throw new Error(`task ${id} not found`)
     this.db
-      .prepare('UPDATE tasks SET title = ?, description = ?, updated_at = ?, rev = rev + 1 WHERE id = ?')
+      .prepare(
+        'UPDATE tasks SET title = ?, description = ?, updated_at = ?, rev = rev + 1 WHERE id = ?'
+      )
       .run(patch.title ?? t.title, patch.description ?? t.description, nowIso(), id)
     return this.get(id)!
   }
@@ -162,12 +172,16 @@ export class TaskStore {
       return { ok: false, reason: 'stale revision — board out of date' }
     }
     this.db
-      .prepare('UPDATE tasks SET status = ?, position = ?, updated_at = ?, rev = rev + 1 WHERE id = ?')
+      .prepare(
+        'UPDATE tasks SET status = ?, position = ?, updated_at = ?, rev = rev + 1 WHERE id = ?'
+      )
       .run(status, position, nowIso(), id)
     return { ok: true, task: this.get(id)! }
   }
 
   softDelete(id: string): void {
-    this.db.prepare('UPDATE tasks SET deleted_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ?').run(nowIso(), nowIso(), id)
+    this.db
+      .prepare('UPDATE tasks SET deleted_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ?')
+      .run(nowIso(), nowIso(), id)
   }
 }

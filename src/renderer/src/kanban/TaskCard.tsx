@@ -6,12 +6,15 @@ import { RUN_DOT_CLASS } from './runDot'
 /** Presentational card content, shared by the sortable card and the drag overlay. */
 export function TaskCardBody({ task }: { task: BoardTask }): React.JSX.Element {
   const run = task.latestRun
+  // A merged (done) card's column already tells the story — a stale run pill
+  // (e.g. a later queued-then-detached run) would only mislead.
+  const showRunPill = run && task.status !== 'done'
   return (
     <>
       <div className="task-card-title">{task.title}</div>
       {(run || task.diffStat || task.remoteLink) && (
         <div className="task-card-chips">
-          {run && (
+          {showRunPill && (
             <span className={`chip run-pill run-${run.status}`}>
               <span className={`dot ${RUN_DOT_CLASS[run.status]}`} />
               {run.status}

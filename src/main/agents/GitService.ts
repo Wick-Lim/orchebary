@@ -86,7 +86,11 @@ export class GitService {
     repo: string
   ): Promise<Array<{ name: string; head: string; current: boolean; subject: string }>> {
     const out = await this.git(
-      ['for-each-ref', 'refs/heads', '--format=%(HEAD)%00%(refname:short)%00%(objectname:short)%00%(subject)'],
+      [
+        'for-each-ref',
+        'refs/heads',
+        '--format=%(HEAD)%00%(refname:short)%00%(objectname:short)%00%(subject)'
+      ],
       repo
     )
     return out

@@ -1,6 +1,13 @@
 import { ipcMain, webContents, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import type { ZodType } from 'zod'
-import type { EventChannel, InvokeChannel, Invokables, MainEvents, SendChannel, Sendables } from '../../shared/ipc'
+import type {
+  EventChannel,
+  InvokeChannel,
+  Invokables,
+  MainEvents,
+  SendChannel,
+  Sendables
+} from '../../shared/ipc'
 
 /**
  * Every IPC entry point validates its payload and rejects calls that do not
@@ -17,7 +24,10 @@ function assertTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent): void {
 export function handle<K extends InvokeChannel>(
   channel: K,
   schema: ZodType<Invokables[K]['req']> | null,
-  handler: (req: Invokables[K]['req'], event: IpcMainInvokeEvent) => Promise<Invokables[K]['res']> | Invokables[K]['res']
+  handler: (
+    req: Invokables[K]['req'],
+    event: IpcMainInvokeEvent
+  ) => Promise<Invokables[K]['res']> | Invokables[K]['res']
 ): void {
   ipcMain.handle(channel, (event, payload) => {
     assertTrustedSender(event)

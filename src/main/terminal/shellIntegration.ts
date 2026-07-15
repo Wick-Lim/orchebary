@@ -12,7 +12,10 @@ export function zshShimDir(): string {
  * Env additions that make a spawned zsh source our OSC 133/633/7 hooks while
  * still loading the user's own dotfiles (VS Code-style ZDOTDIR shim).
  */
-export function shellIntegrationEnv(sessionId: string, baseEnv: Record<string, string>): Record<string, string> {
+export function shellIntegrationEnv(
+  sessionId: string,
+  baseEnv: Record<string, string>
+): Record<string, string> {
   return {
     ORB_USER_ZDOTDIR: baseEnv.ZDOTDIR || baseEnv.HOME || process.env.HOME || '~',
     ZDOTDIR: zshShimDir(),

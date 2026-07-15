@@ -34,7 +34,9 @@ export class ProjectStore {
 
   list(): Project[] {
     const rows = this.db
-      .prepare<[], ProjectRow>('SELECT * FROM projects WHERE archived_at IS NULL ORDER BY created_at')
+      .prepare<[], ProjectRow>(
+        'SELECT * FROM projects WHERE archived_at IS NULL ORDER BY created_at'
+      )
       .all()
     return rows.map(toProject)
   }
@@ -62,16 +64,26 @@ export class ProjectStore {
   ): Project {
     const existing = this.get(id)
     if (!existing) throw new Error(`project ${id} not found`)
-    const settings = patch.settings ? { ...existing.settings, ...patch.settings } : existing.settings
+    const settings = patch.settings
+      ? { ...existing.settings, ...patch.settings }
+      : existing.settings
     this.db
       .prepare(
         `UPDATE projects SET name = ?, base_branch = ?, settings_json = ?, updated_at = ? WHERE id = ?`
       )
-      .run(patch.name ?? existing.name, patch.baseBranch ?? existing.baseBranch, JSON.stringify(settings), nowIso(), id)
+      .run(
+        patch.name ?? existing.name,
+        patch.baseBranch ?? existing.baseBranch,
+        JSON.stringify(settings),
+        nowIso(),
+        id
+      )
     return this.get(id)!
   }
 
   archive(id: string): void {
-    this.db.prepare('UPDATE projects SET archived_at = ?, updated_at = ? WHERE id = ?').run(nowIso(), nowIso(), id)
+    this.db
+      .prepare('UPDATE projects SET archived_at = ?, updated_at = ? WHERE id = ?')
+      .run(nowIso(), nowIso(), id)
   }
 }

@@ -47,7 +47,12 @@ export class HistoryStore {
       )
   }
 
-  search(req: { query: string; sessionId?: string; projectRoot?: string; limit?: number }): HistoryEntry[] {
+  search(req: {
+    query: string
+    sessionId?: string
+    projectRoot?: string
+    limit?: number
+  }): HistoryEntry[] {
     const clauses: string[] = []
     const params: unknown[] = []
     if (req.query) {

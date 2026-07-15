@@ -247,10 +247,15 @@ export function TaskDetailPanel({ task }: { task: BoardTask }): React.JSX.Elemen
               className="btn btn-danger"
               disabled={busy}
               onClick={() => {
-                if (!window.confirm('Discard the worktree (and branch) and cancel this task?'))
-                  return
+                // The shared project workbench must survive a single task's
+                // discard — only legacy per-task worktrees are removed.
+                const isWorkbench = run.branch.startsWith('orc/workbench-')
+                const msg = isWorkbench
+                  ? 'Cancel this task? The project workbench is kept.'
+                  : 'Discard the worktree (and branch) and cancel this task?'
+                if (!window.confirm(msg)) return
                 void act('Discard failed', async () => {
-                  await window.orchebary.worktree.remove(run.id, true)
+                  if (!isWorkbench) await window.orchebary.worktree.remove(run.id, true)
                   const res = await useBoardStore
                     .getState()
                     .moveTask(task.id, 'cancelled', generateKeyBetween(null, null))

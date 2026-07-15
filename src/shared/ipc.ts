@@ -30,7 +30,10 @@ export interface Invokables {
   'projects:list': { req: void; res: Project[] }
   'projects:create': { req: { name: string; repoPath: string }; res: Project }
   'projects:update': {
-    req: { id: string; patch: Partial<Pick<Project, 'name' | 'baseBranch'>> & { settings?: Partial<ProjectSettings> } }
+    req: {
+      id: string
+      patch: Partial<Pick<Project, 'name' | 'baseBranch'>> & { settings?: Partial<ProjectSettings> }
+    }
     res: Project
   }
   'projects:archive': { req: { id: string }; res: void }
@@ -84,7 +87,10 @@ export interface Invokables {
   /** Commit details (`git show --stat`) for a ref. */
   'git:show': { req: { projectId: string; ref: string }; res: { text: string } }
 
-  'worktree:openInTerminal': { req: { runId: string; cols: number; rows: number }; res: TerminalSessionInfo }
+  'worktree:openInTerminal': {
+    req: { runId: string; cols: number; rows: number }
+    res: TerminalSessionInfo
+  }
   'worktree:remove': { req: { runId: string; deleteBranch: boolean }; res: void }
   /** Every managed worktree across projects (+ ghost directories on disk). */
   'worktree:listAll': { req: void; res: WorktreeEntry[] }

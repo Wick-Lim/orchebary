@@ -21,8 +21,9 @@ export async function runSmokeTest(): Promise<never> {
     console.log(`[smoke] ${ok ? 'PASS' : 'FAIL'}: ${reason}`)
     if (!ok) console.log('[smoke] captured output:\n' + JSON.stringify(out.slice(-2000)))
     sessionManager.disposeAll()
+    // app.exit() does not stop the current tick — return normally so the
+    // caller's stack (a PTY data flush) unwinds without an uncaught throw.
     app.exit(ok ? 0 : 1)
-    throw new Error('unreachable')
   }
 
   setTimeout(() => finish(false, 'timeout after 15s'), 15_000)
@@ -32,6 +33,7 @@ export async function runSmokeTest(): Promise<never> {
     const text = Buffer.concat(chunks).toString('utf8')
     const hasEcho = text.includes('ORB_SMOKE_MARKER_OK')
     const hasPromptStart = text.includes('\x1b]133;A\x07')
+    // eslint-disable-next-line no-control-regex -- matching a literal OSC 133;D escape sequence
     const hasCommandFinished = /\x1b\]133;D(;\d+)?\x07/.test(text)
     const hasCwdReport = text.includes('\x1b]7;file://')
     if (hasEcho && hasPromptStart && hasCommandFinished && hasCwdReport) {

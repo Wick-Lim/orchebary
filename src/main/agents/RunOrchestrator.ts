@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process'
 import type { AgentKind, AppEvent, Project, Task, TaskRun, TaskStatus } from '../../shared/domain'
 import type { ProjectStore } from '../db/ProjectStore'
 import type { RunStore } from '../db/RunStore'
@@ -250,8 +251,16 @@ export class RunOrchestrator {
       .listForTask(taskId)
       .find((r) => r.status === 'queued' || r.status === 'running')
     if (!active) return
+    // A prompt already typed into the conversation cannot be untyped — the
+    // agent may still act on it; only queued work is truly removed.
+    const delivered = [...this.trackers.values()].some((t) => t.attachedRunIds.includes(active.id))
     for (const tracker of this.trackers.values()) tracker.removePending(active.id)
-    runs.finish(active.id, { status: 'cancelled', summary: 'removed from the queue' })
+    runs.finish(active.id, {
+      status: 'cancelled',
+      summary: delivered
+        ? 'detached — the prompt was already delivered to the agent'
+        : 'removed from the queue'
+    })
     const updated = runs.get(active.id)
     if (updated) this.deps.broadcast({ type: 'run.status', run: updated })
   }
@@ -268,11 +277,25 @@ export class RunOrchestrator {
     for (const [sessionId, tracker] of this.trackers) {
       if (tracker.attachedRunIds.includes(runId)) {
         this.cancelling.add(runId)
+        const stillRunning = (): boolean =>
+          this.trackers.get(sessionId)?.attachedRunIds.includes(runId) ?? false
         this.deps.sessions.write(sessionId, CANCEL_INTERRUPT)
         setTimeout(() => this.deps.sessions.write(sessionId, CANCEL_INTERRUPT), 300).unref()
+        // A modal dialog swallows the first press — a late third one still
+        // lands on the exit-confirm REPL state.
+        setTimeout(() => {
+          if (stillRunning()) this.deps.sessions.write(sessionId, CANCEL_INTERRUPT)
+        }, 1500).unref()
         const timer = setTimeout(() => {
-          const still = this.trackers.get(sessionId)
-          if (still?.attachedRunIds.includes(runId)) this.deps.sessions.kill(sessionId)
+          if (!stillRunning()) return
+          // Last resorts: SIGTERM the shell's children so the terminal itself
+          // survives; nuke the session only if even that changes nothing.
+          this.terminateForeground(sessionId)
+          const hardTimer = setTimeout(() => {
+            if (stillRunning()) this.deps.sessions.kill(sessionId)
+          }, CANCEL_KILL_GRACE_MS)
+          hardTimer.unref()
+          this.killTimers.set(runId, hardTimer)
         }, CANCEL_KILL_GRACE_MS)
         timer.unref()
         this.killTimers.set(runId, timer)
@@ -287,6 +310,13 @@ export class RunOrchestrator {
       const updated = this.deps.runs.get(runId)
       if (updated) this.deps.broadcast({ type: 'run.status', run: updated })
     }
+  }
+
+  /** SIGTERM the shell's children (the agent) without touching the shell. */
+  private terminateForeground(sessionId: string): void {
+    const pid = this.deps.sessions.get(sessionId)?.info.pid
+    if (!pid) return
+    execFile('pkill', ['-TERM', '-P', String(pid)], () => undefined)
   }
 
   /** before-quit: PTYs die via SessionManager.disposeAll; keep off the DB. */

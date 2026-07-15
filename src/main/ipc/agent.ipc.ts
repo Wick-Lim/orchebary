@@ -179,6 +179,19 @@ export function registerAgentIpc(): void {
         .listForTask(run.taskId)
         .find((r) => r.status === 'queued' || r.status === 'running')
       if (active) throw new Error('task has an active run; cancel it before removing the worktree')
+      // The workbench is shared by every task of the project — refuse while
+      // anything else still uses it.
+      if (path.basename(run.worktreePath) === 'workbench') {
+        if (sessionManager.list().some((s) => s.projectId === project.id)) {
+          throw new Error(
+            'the project terminal is still open; close it before removing the workbench'
+          )
+        }
+        const inUse = runs
+          .listActive()
+          .some((r) => r.worktreePath === run.worktreePath && r.taskId !== run.taskId)
+        if (inUse) throw new Error('another task is still running in this workbench')
+      }
       await worktrees.remove(project, run, { force: true, deleteBranch })
     }
   )

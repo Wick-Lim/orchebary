@@ -13,6 +13,7 @@
 
 const OSC_PROMPT = '\x1b]133;A\x07'
 const OSC_EXEC = '\x1b]133;C\x07'
+// eslint-disable-next-line no-control-regex -- matching a literal OSC 133;D escape sequence
 const OSC_DONE = /\x1b\]133;D(?:;(\d+))?\x07/
 
 /** How long after command start the agent's input is considered ready. */
@@ -62,10 +63,7 @@ export class CommandTracker {
   submit(work: SubmittedWork): void {
     if (this.state.phase === 'idle') {
       this.arm(work)
-    } else if (
-      this.state.phase === 'running' &&
-      Date.now() - this.state.execAt > INPUT_READY_MS
-    ) {
+    } else if (this.state.phase === 'running' && Date.now() - this.state.execAt > INPUT_READY_MS) {
       // The agent has been up long enough to be past startup dialogs — type
       // the task into the conversation.
       this.state.attached.push(work.runId)

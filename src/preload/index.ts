@@ -58,16 +58,22 @@ const api = {
   projects: {
     list: () => invoke('projects:list', undefined),
     create: (name: string, repoPath: string) => invoke('projects:create', { name, repoPath }),
-    update: (id: string, patch: { name?: string; baseBranch?: string; settings?: Partial<ProjectSettings> }) =>
-      invoke('projects:update', { id, patch }),
+    update: (
+      id: string,
+      patch: { name?: string; baseBranch?: string; settings?: Partial<ProjectSettings> }
+    ) => invoke('projects:update', { id, patch }),
     archive: (id: string) => invoke('projects:archive', { id })
   },
 
   tasks: {
     list: (projectId: string) => invoke('tasks:list', { projectId }),
     listWorkingOn: () => invoke('tasks:listWorkingOn', undefined),
-    create: (req: { projectId: string; title: string; description?: string; status?: TaskStatus }) =>
-      invoke('tasks:create', req),
+    create: (req: {
+      projectId: string
+      title: string
+      description?: string
+      status?: TaskStatus
+    }) => invoke('tasks:create', req),
     update: (id: string, patch: { title?: string; description?: string }) =>
       invoke('tasks:update', { id, patch }),
     move: (req: { id: string; status: TaskStatus; position: string; expectedRev: number }) =>

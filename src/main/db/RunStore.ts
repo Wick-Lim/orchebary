@@ -93,7 +93,9 @@ export class RunStore {
 
   listForTask(taskId: string): TaskRun[] {
     return this.db
-      .prepare<[string], RunRow>('SELECT * FROM task_runs WHERE task_id = ? ORDER BY created_at DESC')
+      .prepare<[string], RunRow>(
+        'SELECT * FROM task_runs WHERE task_id = ? ORDER BY created_at DESC'
+      )
       .all(taskId)
       .map(toRun)
   }

@@ -72,6 +72,13 @@ export function GitPanel(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Close the commit detail when switching projects (render-time state adjustment).
+  const [detailProjectId, setDetailProjectId] = useState(projectId)
+  if (detailProjectId !== projectId) {
+    setDetailProjectId(projectId)
+    setDetail(null)
+  }
+
   const refresh = useCallback(() => {
     if (!projectId) return
     window.orchebary.git
@@ -85,7 +92,6 @@ export function GitPanel(): React.JSX.Element {
   }, [projectId])
 
   useEffect(() => {
-    setDetail(null)
     refresh()
     const unsubscribe = window.orchebary.onAppEvent((e) => {
       if (e.type === 'run.status' || e.type === 'run.diffstat' || e.type === 'task.updated') {
@@ -143,7 +149,9 @@ export function GitPanel(): React.JSX.Element {
 
       <div className="git-graph">
         {graph
-          ? graph.split('\n').map((line, i) => <GraphLine key={i} line={line} onPick={pickCommit} />)
+          ? graph
+              .split('\n')
+              .map((line, i) => <GraphLine key={i} line={line} onPick={pickCommit} />)
           : projectId && <div className="rail-empty">No commits yet.</div>}
         {!projectId && <div className="rail-empty">Add a project to see its git tree.</div>}
       </div>
